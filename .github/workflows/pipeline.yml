@@ -1,0 +1,247 @@
+# ============================================================
+# CI/CD PIPELINE - PROXMOX
+# Eine VM: Web-Server mit Nginx
+# ============================================================
+# Autor:       Randolph Bluming
+# Erstellt am:    2026-06-27
+# Letzte Änderung:2026-06-29
+# Projekt:     CI-CO Setup - Proxmox Infrastructure
+# Zweck:       Vollautomatische Installation von Ubuntu 22.04
+#              Wird von Packer während des Template-Builds verwendet
+# ============================================================
+
+name: Proxmox CI/CD Pipeline
+
+# ---- SICHERHEIT ----
+# Nur Lesezugriff auf das Repository
+permissions:
+  contents: read
+
+# ---- TRIGGER ----
+# Pipeline startet automatisch bei:
+on:
+  push:
+    branches: [ main ]          # jedem Push auf main
+  pull_request:
+    branches: [ main ]          # jedem Pull Request auf main
+
+jobs:
+
+  # ============================================================
+  # JOB 1: VM-Template mit Packer bauen
+  # Ergebnis: Template "ubuntu-2204-template" liegt in Proxmox
+  # ============================================================
+  build-template:
+    # Läuft auf deiner Ubuntu-VM in Proxmox
+    # Nicht auf GitHub-Servern → kann Proxmox erreichen
+    runs-on: [self-hosted, proxmox]
+
+    steps:
+
+      # Lädt deinen Code vom GitHub-Repo auf den Runner
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      # Kontrolliert ob Packer korrekt installiert ist
+      - name: Packer Version prüfen
+        run: packer version
+
+      # Lädt das Proxmox-Plugin für Packer herunter
+      # Steht in deiner ubuntu-2204.pkr.hcl unter required_plugins
+      - name: Packer Plugins installieren
+        run: |
+          cd packer
+          packer init .
+
+      # Prüft die pkr.hcl Datei auf Syntaxfehler
+      # Noch kein Build — nur Überprüfung
+      - name: Packer Template validieren
+        run: |
+          cd packer
+          packer validate .
+        env:
+          # Diese drei Werte kommen aus GitHub Secrets
+          # In Packer werden sie so gelesen: "${env("PROXMOX_PASSWORD")}"
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
+          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+
+      # Jetzt wird das Template wirklich gebaut
+      # Packer installiert Ubuntu, konfiguriert es, erstellt Template
+      # Dauert ca. 10-15 Minuten
+      - name: Packer Template bauen
+        run: |
+          cd packer
+          packer build .
+        env:
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
+          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+
+
+  # ============================================================
+  # JOB 2: VM mit Terraform deployen
+  # Wartet bis Job 1 fertig ist
+  # Ergebnis: VM läuft in Proxmox mit einer IP-Adresse
+  # ============================================================
+  deploy-vm:
+    # Startet erst wenn Job 1 erfolgreich war
+    needs: build-template
+    runs-on: [self-hosted, proxmox]
+
+    # Diese IP wird an Job 3 weitergegeben
+    # steps.get-ip.outputs.vm_ip → kommt vom Step weiter unten
+    outputs:
+      vm_ip: ${{ steps.get-ip.outputs.vm_ip }}
+
+    steps:
+
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      # Kontrolliert ob Terraform korrekt installiert ist
+      - name: Terraform Version prüfen
+        run: terraform version
+
+      # Lädt den Proxmox-Provider herunter
+      # Liest provider.tf und lädt benötigte Plugins
+      - name: Terraform initialisieren
+        run: |
+          cd terraform
+          terraform init
+        env:
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
+          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+
+      # Zeigt was Terraform tun WILL — noch keine Änderung
+      # Gut zum Verstehen und Kontrollieren
+      - name: Terraform Plan anzeigen
+        run: |
+          cd terraform
+          terraform plan
+        env:
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
+          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+
+      # Jetzt wird die VM wirklich erstellt
+      # -auto-approve = keine manuelle Bestätigung nötig
+      - name: VM deployen
+        run: |
+          cd terraform
+          terraform apply -auto-approve
+        env:
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
+          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+
+      # Liest die IP-Adresse aus Terraform aus
+      # und speichert sie damit Job 3 sie verwenden kann
+      # vm_ip kommt aus deiner outputs.tf
+      - name: VM IP-Adresse auslesen
+        id: get-ip                    # ← diese ID wird oben bei outputs referenziert
+        run: |
+          cd terraform
+
+          VM_IP=$(terraform output -raw vm_ip 2>/dev/null)
+
+          # Sicherheitscheck: Wenn keine IP → Pipeline abbrechen
+          # Besser Fehler sehen als mit falscher IP weitermachen
+          if [ -z "$VM_IP" ]; then
+            echo "❌ FEHLER: vm_ip Output fehlt!"
+            echo "Prüfe ob outputs.tf korrekt konfiguriert ist."
+            exit 1
+          fi
+
+          echo "✅ VM IP gefunden: $VM_IP"
+
+          # IP wird gespeichert und an Job 3 weitergegeben
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+
+
+  # ============================================================
+  # JOB 3: VM mit Ansible konfigurieren
+  # Wartet bis Job 2 fertig ist
+  # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar
+  # ============================================================
+  configure-vm:
+    # Startet erst wenn Job 2 erfolgreich war
+    needs: deploy-vm
+    runs-on: [self-hosted, proxmox]
+
+    steps:
+
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      # Kontrolliert ob Ansible korrekt installiert ist
+      - name: Ansible Version prüfen
+        run: ansible --version
+
+      # Schreibt den privaten SSH-Key aus GitHub Secrets in eine Datei
+      # Ansible braucht diese Datei um sich per SSH zur VM zu verbinden
+      - name: SSH-Key einrichten
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa    # Pflicht: SSH akzeptiert nur sichere Rechte
+
+      # Die VM braucht Zeit zum Hochfahren nach dem Deploy
+      # Ohne Warten schlägt Ansible sofort fehl
+      # Versucht 30x alle 10 Sekunden = max 5 Minuten
+      - name: Warten bis VM erreichbar ist
+        env:
+          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}   # ← IP kommt von Job 2
+        run: |
+          echo "Warte auf VM: $VM_IP"
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=5 \
+                   -i ~/.ssh/id_rsa \
+                   randolph@$VM_IP 'echo ok' 2>/dev/null; then
+              echo "✅ VM ist erreichbar!"
+              break
+            fi
+            echo "Versuch $i/30 - warte 10 Sekunden..."
+            sleep 10
+          done
+
+      # Speichert den SSH-Fingerabdruck der VM
+      # Verhindert die interaktive "Are you sure?" Frage
+      - name: SSH Fingerabdruck speichern
+        env:
+          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
+        run: |
+          ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts
+
+      # Führt das Ansible Playbook aus
+      # Ansible verbindet sich per SSH zur VM und installiert Nginx
+      - name: Ansible Playbook ausführen
+        env:
+          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          cd ansible
+
+          # Inventory dynamisch erstellen mit der aktuellen VM-IP
+          # Wird bei jedem Pipeline-Run neu geschrieben
+          cat > inventory.ini << EOF
+          [webserver]
+          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+          [all:vars]
+          ansible_python_interpreter=/usr/bin/python3
+          EOF
+
+          # Playbook ausführen
+          ansible-playbook -i inventory.ini playbook.yml \
+            --user randolph \
+            --private-key ~/.ssh/id_rsa \
+            --extra-vars "vm_host=$VM_IP"
+
+      # Sicherheit: Privater Key wird IMMER gelöscht
+      # if: always() → läuft auch wenn vorherige Steps fehlschlagen
+      - name: SSH-Key aufräumen
+        if: always()
+        run: rm -f ~/.ssh/id_rsa

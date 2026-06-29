@@ -1,0 +1,149 @@
+# ============================================================
+# CLOUD-INIT USER-DATA - UBUNTU 22.04 AUTOMATISCHE INSTALLATION
+# ============================================================
+# Autor:       Randolph
+# Erstellt am:    2026-06-27
+# Letzte Änderung:2026-06-28 Umstelltung auf eine statt zwei VM's
+# Projekt:     CI-CO Setup - Proxmox Infrastructure
+# Zweck:       Vollautomatische Installation von Ubuntu 22.04
+#              Wird von Packer während des Template-Builds verwendet
+# ============================================================
+
+#cloud-config
+
+# ============================================================
+# AUTOINSTALL - HAUPTKONFIGURATION
+# ============================================================
+
+autoinstall:
+  version: 1                           # Autoinstall-API-Version (aktuell 1)
+
+  # ============================================================
+  # SYSTEMSPRACHE & TASTATUR
+  # ============================================================
+  
+  locale: de_DE.UTF-8                  # Systemsprache: Deutsch (Deutschland)
+  
+  keyboard:                            # Tastaturlayout
+    layout: de                         # Deutsches QWERTZ-Layout
+
+  # ============================================================
+  # FESTPLATTENKONFIGURATION
+  # ============================================================
+  
+  storage:                             # Festplatten-Einstellungen
+    layout:
+      name: direct                     # Direktes Layout (kein LVM)
+                                       # Eine Partition für alles (/, boot, swap)
+
+  # ============================================================
+  # BENUTZERKONFIGURATION
+  # ============================================================
+  
+  identity:                            # System-Identität
+    hostname: ubuntu-2204-template     # Hostname des Templates
+    username: randolph                 # Standard-Benutzername
+    password: "$6$examp$Wsn6Bk8yd6S6z6E4Zf2yv1W1p1N3k0X7v/M6GZ8xO8fM3O6mN9D3p2r6wKz8N8I5x0hX1G3jU2O8R6M2tF5x11"
+                                       # 🔐 Passwort: test_lab_passwort
+                                       # Generiert mit: mkpasswd -m sha-512
+
+  # ============================================================
+  # SSH-KONFIGURATION
+  # ============================================================
+  
+  ssh:                                 # SSH-Server-Einstellungen
+    install-server: true               # SSH-Server installieren und aktivieren
+    authorized-keys:                   # Öffentliche SSH-Keys für Benutzer
+      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDNpTMQwIdT4Qr8BClEGsrgjCknUPSv7Ei2Z1mzlo5hgMhUcgDl7Q3otelGx3a5NzcRSVdmoBDobft6OGcL+No0W4FAW3g+Po+6+cyvQVw8UsKiYSWiCPbfNLVVP1qaPaCJo1zmHU8KcxU7aRqj4oNGHxDTey/vt7wMnnruauvLw70Y6Zn9rMdtZvbyr761Zc0FdJB1UgrbOMlN1XsXLWklR8CG2AFOU2RtSetQFDCqqmNU1SzLv4e+7aodH1wsT9uf1rSZ0z746+I90RcteDQXJ6UdsSRUdv97HrfgyY1xWrUdylamDvt7QOpA29+DX6LRdgBLNikYUreG2G/Vv+5V95Q3Y/Q/1HkP/vScTU0Ivf5x5GCjUOepaoBDhqLv09HcSS3RiJO9lfRF"
+                                       # Ihr öffentlicher SSH-Key für Passwort-freien Login
+
+  # ============================================================
+  # PAKETE
+  # ============================================================
+  
+  packages:                            # Zusätzlich zu installierende Pakete
+    - qemu-guest-agent                 # QEMU Guest Agent (für IP-Abfrage durch Terraform)
+    - openssh-server                   # SSH-Server (für Remote-Zugriff)
+    - sudo                             # Sudo für Benutzerverwaltung
+    - curl                             # HTTP-Client (für Tests/Downloads)
+    - wget                             # HTTP-Client (für Tests/Downloads)
+
+  # ============================================================
+  # BENUTZERDEFINIERTE EINSTELLUNGEN
+  # ============================================================
+  
+  user-data:                           # Cloud-Init User-Data (zusätzlich)
+    disable_root: true                 # Root-Login deaktivieren (Sicherheit)
+    package_upgrade: true              # Pakete nach Installation aktualisieren
+
+  # ============================================================
+  # NACH-INSTALLATIONS-BEFEHLE (late-commands)
+  # ============================================================
+  # Diese Befehle werden AUSGEFÜHRT, NACHDEM das System installiert ist
+  # Das Zielverzeichnis ist /target (das neue System)
+  # ============================================================
+  
+  late-commands:
+    # 1. Sudo-Rechte für Benutzer randolph (kein Passwort nötig)
+    - "echo 'randolph ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/randolph"
+    # Erklärung: Erlaubt randolph alle Befehle mit sudo ohne Passwort
+    # Wichtig: Für automatisierte Provisionierung (Ansible, Packer)
+    
+    # 2. Berechtigungen für sudoers-Datei setzen
+    - "chmod 440 /target/etc/sudoers.d/randolph"
+    # Erklärung: Sicherheitsrechte für sudoers-Datei (nur lesbar für root)
+    # 440 = r--r----- (root lesen, Gruppe lesen, andere nichts)
+    
+    # 3. QEMU Guest Agent aktivieren (automatischer Start beim Booten)
+    - "systemctl enable qemu-guest-agent --root=/target"
+    # Erklärung: Aktiviert den Service im neuen System
+    # Ermöglicht: IP-Abfrage, Passwort-Änderung, Shutdown-Befehle von Proxmox
+    # --root=/target: Bezieht sich auf das neue System, nicht den Live-Installer
+
+# ============================================================
+# ÄNDERUNGEN IM ÜBERBLICK
+# ============================================================
+#
+# 🔴 GEÄNDERT:
+#   1. Tastaturlayout: "us" → "de" (deutsches Layout)
+#   2. Speicher-Layout: "lvm" → "direct" (einfachere Partitionierung)
+#   3. Hostname: "ubuntu-template" → "ubuntu-2204-template"
+#   4. Benutzername: "ubuntu" → "randolph"
+#   5. Passwort: Neu generiert (test_lab_passwort)
+#   6. SSH-Key: Ihr spezifischer Key
+#   7. Pakete: Erweitert um sudo, curl, wget
+#   8. Late-Commands: Vollständig überarbeitet
+#
+# 🟢 ERGÄNZT:
+#   1. locale: de_DE.UTF-8
+#   2. keyboard.layout: de
+#   3. user-data.disable_root: true
+#   4. user-data.package_upgrade: true
+#   5. sudoers-Datei für randolph
+#   6. QEMU Guest Agent Aktivierung
+#
+# 🔴 ENTFERNT:
+#   1. Keine LVM-Komplexität (direct statt lvm)
+#   2. Kein Default-User "ubuntu"
+#   3. Kein Standard-Passwort
+#
+# ============================================================
+# HINWEISE
+# ============================================================
+#
+# 1. Passwort "test_lab_passwort" ist NUR für das Lab!
+#    In Produktion: Anderes Passwort oder SSH-Key-only Login
+#
+# 2. SSH-Key muss zu Ihrem privaten Key passen:
+#    - Privater Key: ~/.ssh/id_rsa
+#    - Öffentlicher Key: ~/.ssh/id_rsa.pub
+#
+# 3. QEMU Guest Agent wird für Terraform benötigt:
+#    - IP-Abfrage: terraform output vm_ip
+#    - Passwort-Änderung: qm guest passwd
+#    - Shutdown: qm shutdown
+#
+# 4. Die late-commands werden IM Live-System ausgeführt
+#    Die Änderungen gelten für das installierte System (/target)
+#
+# ============================================================

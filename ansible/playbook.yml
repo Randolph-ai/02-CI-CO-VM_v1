@@ -1,0 +1,50 @@
+---
+# ============================================================
+# PLAY 1: Basis-Setup für alle Server
+# ============================================================
+- name: Basis-Setup Web-Server
+  hosts: webserver          # ← Gruppe aus inventory.ini
+  become: true              # ← sudo Rechte (randolph hat NOPASSWD:ALL)
+
+  tasks:
+
+    # ---- SYSTEM UPDATEN ----
+    - name: System aktualisieren
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    # ---- NGINX INSTALLIEREN ----
+    - name: Nginx installieren
+      apt:
+        name: nginx
+        state: present
+
+    # ---- NGINX STARTEN ----
+    - name: Nginx starten und aktivieren
+      service:
+        name: nginx
+        state: started
+        enabled: yes        # ← startet automatisch nach Reboot
+
+    # ---- FIREWALL ----
+    - name: HTTP Port erlauben
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    # ---- WEBSEITE ERSTELLEN ----
+    # ansible_hostname → wird automatisch durch den echten Hostnamen ersetzt
+    # ansible_default_ipv4.address → echte IP der VM
+    - name: Index.html erstellen
+      copy:
+        content: |
+          <h1>Willkommen auf {{ ansible_hostname }}</h1>
+          <p>Deployed von: randolph</p>
+          <p>IP-Adresse: {{ ansible_default_ipv4.address }}</p>
+          <p>Automatisch konfiguriert via GitHub Actions + Ansible</p>
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
