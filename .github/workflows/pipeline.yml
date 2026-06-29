@@ -31,6 +31,7 @@ jobs:
   # JOB 1: VM-Template mit Packer bauen
   # Ergebnis: Template "ubuntu-2204-template" liegt in Proxmox
   # ============================================================
+
   build-template:
     # Läuft auf deiner Ubuntu-VM in Proxmox
     # Nicht auf GitHub-Servern → kann Proxmox erreichen
@@ -60,7 +61,7 @@ jobs:
           cd packer
           packer validate .
         env:
-          # Diese drei Werte kommen aus GitHub Secrets
+          # Packer nutzt Passwort-Authentifizierung
           # In Packer werden sie so gelesen: "${env("PROXMOX_PASSWORD")}"
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
           PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
@@ -105,14 +106,17 @@ jobs:
 
       # Lädt den Proxmox-Provider herunter
       # Liest provider.tf und lädt benötigte Plugins
+      # GEÄNDERT: TF_VAR_* statt PROXMOX_*
+      # Terraform liest nur Variablen die mit TF_VAR_ beginnen
+      # TF_VAR_pm_api_url → wird zu var.pm_api_url in Terraform
       - name: Terraform initialisieren
         run: |
           cd terraform
           terraform init
         env:
-          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
-          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+          TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
+          TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
+          TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
 
       # Zeigt was Terraform tun WILL — noch keine Änderung
       # Gut zum Verstehen und Kontrollieren
@@ -121,9 +125,9 @@ jobs:
           cd terraform
           terraform plan
         env:
-          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
-          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+          TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
+          TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
+          TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
 
       # Jetzt wird die VM wirklich erstellt
       # -auto-approve = keine manuelle Bestätigung nötig
@@ -132,9 +136,9 @@ jobs:
           cd terraform
           terraform apply -auto-approve
         env:
-          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
-          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+          TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
+          TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
+          TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
 
       # Liest die IP-Adresse aus Terraform aus
       # und speichert sie damit Job 3 sie verwenden kann
@@ -181,15 +185,17 @@ jobs:
 
       # Schreibt den privaten SSH-Key aus GitHub Secrets in eine Datei
       # Ansible braucht diese Datei um sich per SSH zur VM zu verbinden
+      # GEÄNDERT: id_rsa → id_ed25519
       - name: SSH-Key einrichten
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa    # Pflicht: SSH akzeptiert nur sichere Rechte
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519    # Pflicht: SSH akzeptiert nur sichere Rechte
 
       # Die VM braucht Zeit zum Hochfahren nach dem Deploy
       # Ohne Warten schlägt Ansible sofort fehl
       # Versucht 30x alle 10 Sekunden = max 5 Minuten
+      # GEÄNDERT: id_rsa → id_ed25519
       - name: Warten bis VM erreichbar ist
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}   # ← IP kommt von Job 2
@@ -198,7 +204,7 @@ jobs:
           for i in {1..30}; do
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
-                   -i ~/.ssh/id_rsa \
+                   -i ~/.ssh/id_ed25519 \
                    randolph@$VM_IP 'echo ok' 2>/dev/null; then
               echo "✅ VM ist erreichbar!"
               break
@@ -217,6 +223,7 @@ jobs:
 
       # Führt das Ansible Playbook aus
       # Ansible verbindet sich per SSH zur VM und installiert Nginx
+      # GEÄNDERT: id_rsa → id_ed25519 (2x)
       - name: Ansible Playbook ausführen
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
@@ -228,7 +235,7 @@ jobs:
           # Wird bei jedem Pipeline-Run neu geschrieben
           cat > inventory.ini << EOF
           [webserver]
-          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/id_ed25519
 
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
@@ -237,11 +244,12 @@ jobs:
           # Playbook ausführen
           ansible-playbook -i inventory.ini playbook.yml \
             --user randolph \
-            --private-key ~/.ssh/id_rsa \
+            --private-key ~/.ssh/id_ed25519 \
             --extra-vars "vm_host=$VM_IP"
 
       # Sicherheit: Privater Key wird IMMER gelöscht
       # if: always() → läuft auch wenn vorherige Steps fehlschlagen
+      # GEÄNDERT: id_rsa → id_ed25519
       - name: SSH-Key aufräumen
         if: always()
-        run: rm -f ~/.ssh/id_rsa
+        run: rm -f ~/.ssh/id_ed25519
