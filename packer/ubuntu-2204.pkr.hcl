@@ -141,8 +141,8 @@ source "proxmox-iso" "ubuntu-template" {
   # ---- SSH-KONFIGURATION ----
   # Ergänzung: SSH-Parameter für Post-Provisioning
   # Grund: Packer muss sich nach dem Booten einloggen können
-  ssh_username             = "randolph"
-  ssh_private_key_file     = "~/.ssh/id_rsa"
+  ssh_username             = "soar-admin"
+  ssh_private_key_file     = "~/.ssh/id_ed25519"
   ssh_timeout              = "20m"
 }
 
