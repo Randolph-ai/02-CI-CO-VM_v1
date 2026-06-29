@@ -1,50 +1,283 @@
 ---
 # ============================================================
-# PLAY 1: Basis-Setup für alle Server
+# ANSIBLE PLAYBOOK - WEB-SERVER KONFIGURATION
+# ============================================================
+# Autor:           Randolph Bluming
+# Erstellt am:     2026-06-29
+# Funktion:        Nginx Web-Server Installation & Konfiguration
+# Ziel-VM:         web-server-prod (10.0.30.101)
+# Wird aufgerufen: GitHub Actions Pipeline (Job 3)
+# ============================================================
+#
+# WAS DIESES PLAYBOOK TUT (Überblick):
+#   1. System-Pakete aktualisieren
+#   2. Nginx installieren
+#   3. Firewall (UFW) konfigurieren
+#   4. Nginx starten & für Autostart aktivieren
+#   5. Eine eigene index.html erstellen
+#   6. Prüfen ob Nginx wirklich antwortet
+#
+# IDEMPOTENZ-PRINZIP:
+#   Dieses Playbook kann beliebig oft ausgeführt werden.
+#   Ansible prüft vor jedem Task ob die Aktion nötig ist.
+#   Nginx schon installiert? → Task wird übersprungen (ok)
+#   Nginx läuft schon? → Task wird übersprungen (ok)
+# ============================================================
+
+# ============================================================
+# PLAY-DEFINITION
+# ============================================================
+# Ein "Play" verbindet eine Gruppe von Servern mit Tasks.
+# Hier: Alle Server aus der Gruppe "webserver" in inventory.ini
 # ============================================================
 - name: Basis-Setup Web-Server
-  hosts: webserver          # ← Gruppe aus inventory.ini
-  become: true              # ← sudo Rechte (randolph hat NOPASSWD:ALL)
+  hosts: webserver       # ← Gruppe aus inventory.ini
+                         #   inventory.ini: [webserver]
+                         #                  web-server-prod ansible_host=10.0.30.101
+  become: true           # ← sudo-Rechte für alle Tasks
+                         #   Randolph hat NOPASSWD:ALL in Packer gesetzt
+                         #   → keine Passwort-Abfrage nötig
 
   tasks:
 
-    # ---- SYSTEM UPDATEN ----
-    - name: System aktualisieren
+    # ==========================================================
+    # TASK 1: SYSTEM AKTUALISIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   apt update  → Paketlisten aktualisieren (weiß was verfügbar ist)
+    #
+    # WICHTIG: Kein "upgrade: dist" !
+    #   upgrade: dist würde alle installierten Pakete upgraden.
+    #   Das ist in einer automatisierten Pipeline gefährlich,
+    #   weil es unerwartete Abhängigkeiten ändern kann.
+    #   Wir wollen nur den Cache aktualisieren, damit
+    #   apt weiß wo es Nginx herbekommt.
+    #
+    # cache_valid_time: 3600
+    #   Wenn apt update in den letzten 3600 Sekunden (1 Stunde)
+    #   schon ausgeführt wurde, wird es NICHT nochmal gemacht.
+    #   Das spart Zeit bei wiederholten Playbook-Ausführungen.
+    # ==========================================================
+    - name: Paketlisten aktualisieren
       apt:
         update_cache: yes
-        upgrade: dist
+        cache_valid_time: 3600  # ← Kein Update wenn < 1h alt
 
-    # ---- NGINX INSTALLIEREN ----
+    # ==========================================================
+    # TASK 2: NGINX INSTALLIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   apt install nginx → Nginx Web-Server installieren
+    #
+    # state: present
+    #   "present" bedeutet: Stelle sicher dass Nginx installiert ist.
+    #   Ist Nginx schon installiert? → nichts tun (idempotent!)
+    #   Ist Nginx NICHT installiert? → installieren
+    #
+    # ALTERNATIVE STATES (zur Info):
+    #   state: latest  → immer auf neueste Version updaten
+    #   state: absent  → deinstallieren (das Gegenteil!)
+    # ==========================================================
     - name: Nginx installieren
       apt:
         name: nginx
-        state: present
+        state: present  # ← Installieren falls nicht vorhanden
 
-    # ---- NGINX STARTEN ----
-    - name: Nginx starten und aktivieren
-      service:
-        name: nginx
-        state: started
-        enabled: yes        # ← startet automatisch nach Reboot
+    # ==========================================================
+    # TASK 3: UFW FIREWALL AKTIVIEREN
+    # ==========================================================
+    # Was ist UFW?
+    #   UFW = Uncomplicated Firewall
+    #   Eine vereinfachte Oberfläche für iptables (Linux Firewall)
+    #
+    # WARUM MUSS DAS VOR DEN REGELN KOMMEN?
+    #   UFW muss erst aktiviert sein bevor du Regeln hinzufügst.
+    #   Reihenfolge falsch → Task schlägt fehl.
+    #
+    # policy: allow für incoming?
+    #   Nein! Default bleibt "deny" für alles.
+    #   Wir erlauben NUR explizit was wir brauchen (Port 22, 80)
+    #
+    # logging: on
+    #   Firewall-Events werden geloggt → wichtig für Security!
+    #   Du siehst wer versucht auf deine VM zuzugreifen.
+    # ==========================================================
+    - name: UFW Firewall aktivieren
+      ufw:
+        state: enabled    # ← UFW einschalten
+        logging: 'on'     # ← Firewall-Events loggen (Security!)
 
-    # ---- FIREWALL ----
-    - name: HTTP Port erlauben
+    # ==========================================================
+    # TASK 4: SSH PORT FREIGEBEN
+    # ==========================================================
+    # WARUM SSH VOR HTTP?
+    #   Wenn du UFW aktivierst und SSH nicht freigibst,
+    #   sperrst du dich selbst aus der VM aus!
+    #   SSH (Port 22) IMMER als erstes freigeben.
+    #
+    # name: OpenSSH
+    #   UFW kennt vordefinierte Dienst-Namen (aus /etc/ufw/applications.d/)
+    #   "OpenSSH" ist einfacher als port: '22' proto: tcp
+    # ==========================================================
+    - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
+      ufw:
+        rule: allow
+        name: OpenSSH     # ← Vordefinierter UFW-Dienst für Port 22
+
+    # ==========================================================
+    # TASK 5: HTTP PORT FREIGEBEN
+    # ==========================================================
+    # Was passiert hier?
+    #   Firewall-Regel hinzufügen: Port 80 (HTTP) erlauben
+    #
+    # port: '80'
+    #   Port 80 = Standard HTTP Port
+    #   Nginx lauscht standardmäßig auf Port 80
+    #
+    # proto: tcp
+    #   TCP = Transmission Control Protocol
+    #   HTTP verwendet TCP (nicht UDP)
+    #   Bei Webservern immer tcp angeben
+    #
+    # rule: allow
+    #   Pakete auf Port 80 dürfen rein
+    #   Alles andere bleibt geblockt (UFW Default: deny)
+    # ==========================================================
+    - name: HTTP Port 80 freigeben
       ufw:
         rule: allow
         port: '80'
-        proto: tcp
+        proto: tcp        # ← HTTP läuft über TCP
 
-    # ---- WEBSEITE ERSTELLEN ----
-    # ansible_hostname → wird automatisch durch den echten Hostnamen ersetzt
-    # ansible_default_ipv4.address → echte IP der VM
-    - name: Index.html erstellen
+    # ==========================================================
+    # TASK 6: NGINX STARTEN UND AKTIVIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   systemctl start nginx   → Nginx jetzt sofort starten
+    #   systemctl enable nginx  → Nginx nach Reboot automatisch starten
+    #
+    # state: started
+    #   "started" = Nginx muss laufen.
+    #   Läuft Nginx schon? → nichts tun (idempotent!)
+    #   Läuft Nginx nicht? → starten
+    #
+    # enabled: yes
+    #   Nginx wird als Systemd-Service registriert.
+    #   Nach einem VM-Neustart startet Nginx automatisch.
+    #   Ohne "enabled: yes" → nach Reboot ist Nginx aus!
+    # ==========================================================
+    - name: Nginx starten und für Autostart aktivieren
+      service:
+        name: nginx
+        state: started    # ← Jetzt starten
+        enabled: yes      # ← Nach Reboot automatisch starten
+
+    # ==========================================================
+    # TASK 7: INDEX.HTML ERSTELLEN
+    # ==========================================================
+    # Was passiert hier?
+    #   Eine eigene index.html wird in den Nginx-Webroot kopiert.
+    #   Webroot = /var/www/html/ (Standard bei Nginx auf Ubuntu)
+    #
+    # content: |
+    #   Der "|" in YAML bedeutet: mehrzeiliger Text folgt.
+    #   Alles was eingerückt darunter steht ist der Inhalt der Datei.
+    #
+    # DYNAMISCHE VARIABLEN (werden zur Laufzeit ersetzt):
+    #   {{ ansible_hostname }}
+    #     → Wird durch den echten Hostnamen der VM ersetzt
+    #     → z.B. "web-server-prod"
+    #
+    #   {{ ansible_default_ipv4.address }}
+    #     → Wird durch die echte IP der VM ersetzt
+    #     → z.B. "10.0.30.101"
+    #
+    #   Ansible sammelt diese Infos automatisch beim Start
+    #   (sogenannte "Facts" - Fakten über das System)
+    #
+    # owner/group: www-data
+    #   www-data ist der Nginx-Benutzer auf Ubuntu.
+    #   Nginx braucht Lese-Rechte auf die Datei.
+    #
+    # mode: '0644'
+    #   Linux Dateiberechtigungen:
+    #   0644 = Owner lesen+schreiben, Gruppe lesen, Andere lesen
+    #   Nginx (www-data) kann die Datei lesen → Webseite wird angezeigt
+    # ==========================================================
+    - name: Eigene index.html erstellen
       copy:
         content: |
-          <h1>Willkommen auf {{ ansible_hostname }}</h1>
-          <p>Deployed von: randolph</p>
-          <p>IP-Adresse: {{ ansible_default_ipv4.address }}</p>
-          <p>Automatisch konfiguriert via GitHub Actions + Ansible</p>
-        dest: /var/www/html/index.html
-        owner: www-data
-        group: www-data
-        mode: '0644'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Web-Server - {{ ansible_hostname }}</title>
+          </head>
+          <body>
+            <h1>Willkommen auf {{ ansible_hostname }}</h1>
+            <p>Deployed von: randolph</p>
+            <p>IP-Adresse: {{ ansible_default_ipv4.address }}</p>
+            <p>Automatisch konfiguriert via GitHub Actions + Ansible</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html   # ← Nginx Webroot
+        owner: www-data                  # ← Nginx-Benutzer
+        group: www-data                  # ← Nginx-Gruppe
+        mode: '0644'                     # ← Leserechte für Nginx
+
+    # ==========================================================
+    # TASK 8: VERIFIZIEREN OB NGINX WIRKLICH ANTWORTET
+    # ==========================================================
+    # Was passiert hier?
+    #   Ansible macht einen HTTP-Request auf localhost:80
+    #   und prüft ob Nginx antwortet.
+    #
+    # uri-Modul = Ansible's eingebauter HTTP-Client
+    #
+    # url: http://localhost
+    #   Wir testen von INNEN der VM (nicht von außen)
+    #   Das reicht um zu prüfen ob Nginx läuft
+    #
+    # status_code: 200
+    #   HTTP 200 = "OK" → Nginx antwortet korrekt
+    #   HTTP 500 = Server-Fehler
+    #   HTTP 404 = Seite nicht gefunden
+    #   Wenn NICHT 200 → Task schlägt fehl → Pipeline stoppt!
+    #
+    # register: nginx_check
+    #   Das Ergebnis des HTTP-Requests wird in der Variable
+    #   "nginx_check" gespeichert → können wir im nächsten Task ausgeben
+    # ==========================================================
+    - name: Prüfen ob Nginx auf Port 80 antwortet
+    # checkov:skip=CKV2_ANSIBLE_1: Interner Localhost-Test, HTTPS nicht nötig
+      uri:
+        url: http://127.0.0.1
+        status_code: 200    # ← Erwartet HTTP 200 OK
+      register: nginx_check  # ← Ergebnis speichern
+      tags: 
+        - verify
+
+    # ==========================================================
+    # TASK 9: ERGEBNIS AUSGEBEN
+    # ==========================================================
+    # Was passiert hier?
+    #   Das Ergebnis des HTTP-Checks wird in der Pipeline
+    #   als Log-Nachricht ausgegeben.
+    #
+    # debug-Modul = gibt Nachrichten im Ansible-Output aus
+    #
+    # msg: "..."
+    #   nginx_check.status → der HTTP Status Code (z.B. 200)
+    #   nginx_check.url    → die getestete URL
+    #
+    # Warum?
+    #   Du siehst im GitHub Actions Log genau ob und wie
+    #   Nginx antwortet. Sehr hilfreich beim Debugging!
+    # ==========================================================
+    - name: Nginx Status ausgeben
+      debug:
+        msg: |
+          ✅ Nginx läuft erfolgreich!
+          URL:    {{ nginx_check.url }}
+          Status: {{ nginx_check.status }}
+          Host:   {{ ansible_hostname }}
+          IP:     {{ ansible_default_ipv4.address }}
