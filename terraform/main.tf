@@ -26,19 +26,19 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   node_name   = var.target_node
   vm_id       = var.web_server_vm_id
 
-  
+
   # QEMU Guest Agent (Pflicht für IP-Output!)
   agent {
     enabled = true
   }
 
-  timeout_clone = 600  # 10 Minuten - bei 40GB Template wichtig!
+  timeout_clone = 600 # 10 Minuten - bei 40GB Template wichtig!
 
   # Template klonen (von Packer erstellt)
   clone {
-    vm_id         = var.template_vm_id
+    vm_id = var.template_vm_id
   }
-  
+
 
   # CPU
   cpu {
@@ -66,11 +66,16 @@ resource "proxmox_virtual_environment_vm" "web_server" {
 
   # Cloud-Init (konfiguriert VM beim ersten Start)
   initialization {
+    dns {
+      servers = ["8.8.8.8", "1.1.1.1"]
+    }
+
     ip_config {
       ipv4 {
-        address = var.web_server_ip      # ← jetzt Variable!
-        gateway = var.network_gateway    # ← jetzt Variable!
+        address = var.web_server_ip # ← jetzt Variable!
+        gateway = var.network_gateway
       }
+
     }
     user_account {
       username = "randolph"
