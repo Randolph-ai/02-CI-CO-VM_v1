@@ -1,0 +1,101 @@
+# ============================================================
+# CLOUD-INIT USER-DATA - UBUNTU 22.04 AUTOMATISCHE INSTALLATION
+# ============================================================
+# Autor:       Randolph
+# Erstellt am:    2026-06-27
+# Letzte Änderung:2026-06-30 
+# Projekt:     CI-CO Setup - Proxmox Infrastructure
+# Zweck:       Vollautomatische Installation von Ubuntu 22.04
+#              Wird von Packer während des Template-Builds verwendet
+# ============================================================
+
+#cloud-config
+
+# ============================================================
+# AUTOINSTALL - HAUPTKONFIGURATION
+# ============================================================
+
+autoinstall:
+  version: 1                           # Autoinstall-API-Version (aktuell 1)
+
+  # ============================================================
+  # SYSTEMSPRACHE & TASTATUR
+  # ============================================================
+
+  locale: de_DE.UTF-8                  # Systemsprache: Deutsch (Deutschland)
+
+  keyboard:                            # Tastaturlayout
+    layout: de                         # Deutsches QWERTZ-Layout
+
+  # ============================================================
+  # FESTPLATTENKONFIGURATION
+  # ============================================================
+
+  storage:                             # Festplatten-Einstellungen
+    layout:
+      name: direct                     # Direktes Layout (kein LVM)
+                                        # Eine Partition für alles (/, boot, swap)
+
+  # ============================================================
+  # BENUTZERKONFIGURATION
+  # ============================================================
+
+  identity:                            # System-Identität
+    hostname: ubuntu-2204-template     # Hostname des Templates
+    username: randolph                 # Standard-Benutzername
+    password: "$6$examp$Wsn6Bk8yd6S6z6E4Zf2yv1W1p1N3k0X7v/M6GZ8xO8fM3O6mN9D3p2r6wKz8N8I5x0hX1G3jU2O8R6M2tF5x11"
+                                        # 🔐 Passwort: test_lab_passwort
+                                        # Generiert mit: mkpasswd -m sha-512
+
+  # ============================================================
+  # SSH-KONFIGURATION
+  # ============================================================
+
+  ssh:                                 # SSH-Server-Einstellungen
+    install-server: true               # SSH-Server installieren und aktivieren
+    authorized-keys:                   # Öffentliche SSH-Keys für Benutzer
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKOiRgt5dgEWLlphlv2wfSenEZMIL+npZRJI4pMh9c3z soar-admin@soar-dev-server"
+                                        # Ihr öffentlicher SSH-Key für Passwort-freien Login
+
+  # ============================================================
+  # PAKETE
+  # ============================================================
+
+  packages:                            # Zusätzlich zu installierende Pakete
+    - qemu-guest-agent                 # QEMU Guest Agent (für IP-Abfrage durch Terraform)
+    - openssh-server                   # SSH-Server (für Remote-Zugriff)
+    - sudo                             # Sudo für Benutzerverwaltung
+    - curl                             # HTTP-Client (für Tests/Downloads)
+    - wget                             # HTTP-Client (für Tests/Downloads)
+
+  # ============================================================
+  # BENUTZERDEFINIERTE EINSTELLUNGEN
+  # ============================================================
+
+  user-data:                           # Cloud-Init User-Data (zusätzlich)
+    disable_root: true                 # Root-Login deaktivieren (Sicherheit)
+    package_upgrade: true              # Pakete nach Installation aktualisieren
+
+  # ============================================================
+  # NACH-INSTALLATIONS-BEFEHLE (late-commands)
+  # ============================================================
+  # Diese Befehle werden AUSGEFÜHRT, NACHDEM das System installiert ist
+  # Das Zielverzeichnis ist /target (das neue System)
+  # ============================================================
+
+  late-commands:
+    # 1. Sudo-Rechte für Benutzer randolph (kein Passwort nötig)
+    - "echo 'randolph ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/randolph"
+    # Erklärung: Erlaubt randolph alle Befehle mit sudo ohne Passwort
+    # Wichtig: Für automatisierte Provisionierung (Ansible, Packer)
+
+    # 2. Berechtigungen für sudoers-Datei setzen
+    - "chmod 440 /target/etc/sudoers.d/randolph"
+    # Erklärung: Sicherheitsrechte für sudoers-Datei (nur lesbar für root)
+    # 440 = r--r----- (root lesen, Gruppe lesen, andere nichts)
+
+    # 3. QEMU Guest Agent aktivieren (automatischer Start beim Booten)
+    - "systemctl enable qemu-guest-agent --root=/target"
+    # Erklärung: Aktiviert den Service im neuen System
+    # Ermöglicht: IP-Abfrage, Passwort-Änderung, Shutdown-Befehle von Proxmox
+    # --root=/target: Bezieht sich auf das neue System, nicht den Live-Installer
