@@ -3,7 +3,7 @@
 # ============================================================
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-06-29
+# Letzte Änderung: 2026-07-02
 # FUNKTION:    Erstellt EINE VM auf Proxmox
 # BESCHREIBUNG: Web-Server (Nginx) mit statischer IP 10.0.30.101
 # ============================================================
