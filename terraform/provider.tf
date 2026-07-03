@@ -2,7 +2,7 @@
 # TERRAFORM PROVIDER KONFIGURATION - PROXMOX
 # ============================================================
 # Erstellt am:     2026-06-26
-# Letzte Änderung: 2026-06-29
+# Letzte Änderung: 2026-07-03
 # ENTWICKLER:    Infrastructure Team
 # FUNKTION:      Terraform Provider für Proxmox VE
 # ANWENDUNG:     Automatisierte VM-Provisionierung - Production
@@ -60,29 +60,6 @@ provider "proxmox" {
 # spezielle Anforderungen konfiguriert werden.
 # ============================================================
 
-/*
-  # OPTION 1: SSH-Konfiguration für Provisioner
-  # Wird benötigt für file/remote-exec Provisioner
-  ssh {
-    # SSH Agent für Authentifizierung
-    agent = true
-    
-    # Username für SSH-Verbindungen
-    username = "root"
-    
-    # Passwort (nicht empfohlen, besser SSH-Key)
-    password = var.proxmox_password
-  }
-
-  # OPTION 2: CA-Zertifikat für SSL-Validierung
-  # Statt insecure=true, kann ein gültiges CA-Zertifikat
-  # hinterlegt werden (sicherer!)
-  ca_certificate = file("/etc/ssl/certs/proxmox-ca.crt")
-  
-  # OPTION 3: Timeout für API-Requests
-  # Standard: 600 Sekunden
-  timeout = 600
-*/
 
 # ============================================================
 # PROVIDER VERIFIZIERUNG
