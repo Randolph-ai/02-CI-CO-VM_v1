@@ -181,7 +181,7 @@ variable "proxmox_url" {
   type    = string
   default = env("PROXMOX_URL")
   #    │
-  #    └── Aus Umgebungsvariable gelesen
+  #    └── Aus Umgebungsvariable gelesen aus git secrets
   #        z.B. export PROXMOX_URL="https://10.0.30.1:8006/"
 }
 
@@ -189,7 +189,7 @@ variable "proxmox_username" {
   type    = string
   default = env("PROXMOX_USER")
   #    │
-  #    └── Aus Umgebungsvariable gelesen
+  #    └── Aus Umgebungsvariable gelesen aus git secrets
   #        z.B. export PROXMOX_USER="root@pam"
 }
 
@@ -199,7 +199,7 @@ variable "proxmox_password" {
   sensitive = true
   #    │
   #    └── SENSITIVE! Wird nicht in Logs ausgegeben
-  #        Aus Umgebungsvariable gelesen
+  #        Aus Umgebungsvariable gelesen aus git secrets
   #        z.B. export PROXMOX_PASSWORD="secret"
 }
 
