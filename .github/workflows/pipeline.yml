@@ -4,7 +4,7 @@
 # ============================================================
 # Autor:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-06-29
+# Letzte Änderung:2026-07-04
 # Projekt:     CI-CO Setup - Proxmox Infrastructure
 # Zweck:       Vollautomatische Installation von Ubuntu 22.04
 #              Wird von Packer während des Template-Builds verwendet
@@ -76,9 +76,15 @@ jobs:
           PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
           PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
 
+      - name: Alte Template-VM entfernen (falls vorhanden)
+        run: |
+          ssh -o StrictHostKeyChecking=no root@10.0.30.22 \
+            "qm destroy 2000 || true"     
+            
       # Jetzt wird das Template wirklich gebaut
       # Packer installiert Ubuntu, konfiguriert es, erstellt Template
       # Dauert ca. 10-15 Minuten
+      
       - name: Packer Template bauen
         run: |
           cd packer
