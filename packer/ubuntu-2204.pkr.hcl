@@ -150,21 +150,6 @@ source "proxmox-clone" "ubuntu" {
     vlan_tag = "30"
   }
 
-# ---- DISK-GRÖSSE FÜR BUILD ----
-  # Vergrößert die geklonte Disk vor der Provisionierung
-  #    │
-  #    └── VM 9000 (Basis) hat nur ~2,2 GB (Cloud-Image-Standard)
-  #        Reicht nicht für "apt-get upgrade" (Sicherheitsupdates)
-  #        Terraform vergrößert die Disk später separat beim Deploy
-  #        (40 GB) - das hilft Packer beim BUILD selbst aber nicht,
-  #        daher hier eigene, kleinere Zielgröße nur für den Build
-  
-  disks {
-    disk_size    = "20G"
-    storage_pool = "local-lvm"
-    type         = "scsi"
-    format       = "raw"
-  }
 
   # ---- STATISCHE IP FÜR BUILD ----
   # Feste IP nur für den Build-Vorgang
