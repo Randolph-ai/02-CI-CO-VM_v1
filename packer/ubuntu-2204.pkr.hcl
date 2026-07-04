@@ -373,6 +373,9 @@ build {
     #        Wird in der Reihenfolge ausgeführt
     
     inline = [
+      "df -h /",
+      "lsblk",
+               
       # ---- SYSTEM AKTUALISIEREN ----
       # Updates und Upgrades für Sicherheit und Stabilität
       "sudo apt-get update",
