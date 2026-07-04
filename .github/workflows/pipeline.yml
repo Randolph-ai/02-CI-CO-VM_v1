@@ -21,12 +21,21 @@ permissions:
 # Pipeline startet automatisch bei:
 on:
   push:
-    branches: [ main ]          # jedem Push auf main
+    branches: [main]
+    paths:
+      - 'packer/**'
+      - 'terraform/**'
+      - 'ansible/**'
+      - '.github/workflows/pipeline.yml'
   pull_request:
-    branches: [ main ]          # jedem Pull Request auf main
+    branches: [main]
+    paths:
+      - 'packer/**'
+      - 'terraform/**'
+      - 'ansible/**'
+      - '.github/workflows/pipeline.yml'
 
 jobs:
-
   # ============================================================
   # JOB 1: VM-Template mit Packer bauen
   # Ergebnis: Template "ubuntu-2204-template" liegt in Proxmox
