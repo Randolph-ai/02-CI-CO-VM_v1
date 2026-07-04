@@ -232,6 +232,7 @@ build {
                
       # ---- SYSTEM AKTUALISIEREN ----
       # Updates und Upgrades für Sicherheit und Stabilität
+      "sudo cloud-init status --wait"
       "sudo apt-get update",
       "sudo apt-get upgrade -y",
       
