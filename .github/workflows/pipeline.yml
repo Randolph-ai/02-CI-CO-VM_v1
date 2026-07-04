@@ -199,18 +199,17 @@ jobs:
         run: ansible --version
 
       # Schreibt den privaten SSH-Key aus GitHub Secrets in eine Datei
-      # Ansible braucht diese Datei um sich per SSH zur VM zu verbinden
-      # GEÄNDERT: id_rsa → id_ed25519
+      # Eigener, klar benannter Pfad (NICHT id_ed25519!) — das ist der
+      # dauerhafte Packer-Key und darf von Job 3 nicht überschrieben/gelöscht werden
       - name: SSH-Key einrichten
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519    # Pflicht: SSH akzeptiert nur sichere Rechte
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/gh_actions_deploy_key
+          chmod 600 ~/.ssh/gh_actions_deploy_key
 
       # Die VM braucht Zeit zum Hochfahren nach dem Deploy
       # Ohne Warten schlägt Ansible sofort fehl
       # Versucht 30x alle 10 Sekunden = max 5 Minuten
-      # GEÄNDERT: id_rsa → id_ed25519
       - name: Warten bis VM erreichbar ist
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}   # ← IP kommt von Job 2
@@ -219,7 +218,7 @@ jobs:
           for i in {1..30}; do
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
-                   -i ~/.ssh/id_ed25519 \
+                   -i ~/.ssh/gh_actions_deploy_key \
                    randolph@$VM_IP 'echo ok' 2>/dev/null; then
               echo "✅ VM ist erreichbar!"
               break
@@ -238,7 +237,6 @@ jobs:
 
       # Führt das Ansible Playbook aus
       # Ansible verbindet sich per SSH zur VM und installiert Nginx
-      # GEÄNDERT: id_rsa → id_ed25519 (2x)
       - name: Ansible Playbook ausführen
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
@@ -250,7 +248,7 @@ jobs:
           # Wird bei jedem Pipeline-Run neu geschrieben
           cat > inventory.ini << EOF
           [webserver]
-          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/id_ed25519
+          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
 
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
@@ -259,12 +257,11 @@ jobs:
           # Playbook ausführen
           ansible-playbook -i inventory.ini playbook.yml \
             --user randolph \
-            --private-key ~/.ssh/id_ed25519 \
+            --private-key ~/.ssh/gh_actions_deploy_key \
             --extra-vars "vm_host=$VM_IP"
 
       # Sicherheit: Privater Key wird IMMER gelöscht
       # if: always() → läuft auch wenn vorherige Steps fehlschlagen
-      # GEÄNDERT: id_rsa → id_ed25519
       - name: SSH-Key aufräumen
         if: always()
-        run: rm -f ~/.ssh/id_ed25519
+        run: rm -f ~/.ssh/gh_actions_deploy_key
