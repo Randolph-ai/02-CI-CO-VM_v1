@@ -114,6 +114,8 @@ jobs:
 
       - name: Repository auschecken
         uses: actions/checkout@v4
+        with:
+          clean: false
 
       # Kontrolliert ob Terraform korrekt installiert ist
       - name: Terraform Version prüfen
