@@ -163,6 +163,7 @@ source "proxmox-clone" "ubuntu" {
     disk_size    = "20G"
     storage_pool = "local-lvm"
     type         = "scsi"
+    format       = "raw"
   }
 
   # ---- STATISCHE IP FÜR BUILD ----
