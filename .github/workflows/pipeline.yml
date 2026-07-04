@@ -51,6 +51,8 @@ jobs:
       # Lädt deinen Code vom GitHub-Repo auf den Runner
       - name: Repository auschecken
         uses: actions/checkout@v4
+        with:
+            clean: false
 
       # Kontrolliert ob Packer korrekt installiert ist
       - name: Packer Version prüfen
@@ -195,6 +197,8 @@ jobs:
 
       - name: Repository auschecken
         uses: actions/checkout@v4
+        with:
+          clean: false
 
       # Kontrolliert ob Ansible korrekt installiert ist
       - name: Ansible Version prüfen
