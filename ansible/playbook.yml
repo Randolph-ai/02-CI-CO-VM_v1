@@ -214,7 +214,7 @@
           </head>
           <body>
             <h1>Willkommen auf {{ ansible_hostname }}</h1>
-            <p>Deployed von: randolph</p>
+            <p>Deployed von: randolph bluming</p>
             <p>IP-Adresse: {{ ansible_default_ipv4.address }}</p>
             <p>Automatisch konfiguriert via GitHub Actions + Ansible</p>
           </body>
