@@ -97,7 +97,7 @@ jobs:
           PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
 
 # ============================================================
-  # JOB 2: Security-Gate mit Checkov (Phase 2A)
+  # JOB 2: ***** Security-Gate mit Checkov (Phase 2A) ********
   # Wartet bis Job 1 fertig ist
   # Prüft terraform/ gegen unsere Custom-Checks (CKV_PROXMOX_1/2),
   # BEVOR irgendeine VM deployed wird. Hartes Gate: schlägt der
