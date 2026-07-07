@@ -4,7 +4,7 @@
 # ============================================================
 # Autor:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-07-04
+# Letzte Änderung:2026-07-07
 # Projekt:     CI-CO Setup - Proxmox Infrastructure
 # Zweck:       Vollautomatische Installation von Ubuntu 22.04
 #              Wird von Packer während des Template-Builds verwendet
@@ -96,15 +96,43 @@ jobs:
           PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
           PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
 
+# ============================================================
+  # JOB 2: Security-Gate mit Checkov (Phase 2A)
+  # Wartet bis Job 1 fertig ist
+  # Prüft terraform/ gegen unsere Custom-Checks (CKV_PROXMOX_1/2),
+  # BEVOR irgendeine VM deployed wird. Hartes Gate: schlägt der
+  # Scan fehl, läuft deploy-vm gar nicht erst an (kein Soft-Fail).
+  # ============================================================
+  security-scan:
+    needs: build-template
+    runs-on: [self-hosted, proxmox]
+
+    steps:
+
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Checkov Version prüfen
+        run: checkov --version
+
+      # Kein "|| true", kein continue-on-error: Checkov gibt bei
+      # mindestens einem FAILED Check automatisch Exit-Code 1 zurück,
+      # was diesen Step und damit den ganzen Job fehlschlagen lässt.
+      # Genau das ist das gewünschte harte Gate.
+      - name: Checkov Security-Gate (Custom Proxmox-Checks)
+        run: |
+          checkov -d terraform --external-checks-dir terraform/checks --compact
 
   # ============================================================
-  # JOB 2: VM mit Terraform deployen
-  # Wartet bis Job 1 fertig ist
+  # JOB 3: VM mit Terraform deployen
+  # Wartet bis Job 1 UND security-scan fertig ist
   # Ergebnis: VM läuft in Proxmox mit einer IP-Adresse
   # ============================================================
   deploy-vm:
     # Startet erst wenn Job 1 erfolgreich war
-    needs: build-template
+    needs: [build-template, security-scan]
     runs-on: [self-hosted, proxmox]
 
     # Diese IP wird an Job 3 weitergegeben
@@ -184,8 +212,8 @@ jobs:
 
 
   # ============================================================
-  # JOB 3: VM mit Ansible konfigurieren
-  # Wartet bis Job 2 fertig ist
+  # JOB 4: VM mit Ansible konfigurieren
+  # Wartet bis Job 3 (deploy-vm) fertig ist
   # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar
   # ============================================================
   configure-vm:
