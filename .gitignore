@@ -8,3 +8,5 @@ terraform/.terraform.lock.hcl
 # Packer - Secrets
 packer/*.pkrvars.hcl
 packer/packer_cache/
+__pycache__/
+*.pyc
