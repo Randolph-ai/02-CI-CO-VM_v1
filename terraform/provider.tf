@@ -49,10 +49,13 @@ provider "proxmox" {
   # 10 provider.tf Dateien suchen. So nur in einer tfvars.
   api_token = "${var.pm_api_token_id}=${var.pm_api_token_secret}"
 
-  # SSL-Zertifikat nicht prüfen (Homelab mit self-signed Cert)
-  # Im echten Enterprise: insecure = false + echtes Zertifikat
+  # checkov:skip=CKV_PROXMOX_2: Homelab mit self-signed Zertifikat,
+  # kein produktives TLS-Ziel vorhanden. Bewusst akzeptiertes Risiko,
+  # dokumentiert und verifiziert in Phase 2A (Session 07.07.2026).
   insecure = true
 }
+
+
 # ============================================================
 # ERWEITERTE PROVIDER KONFIGURATION (OPTIONAL)
 # ============================================================
