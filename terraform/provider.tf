@@ -2,7 +2,7 @@
 # TERRAFORM PROVIDER KONFIGURATION - PROXMOX
 # ============================================================
 # Erstellt am:     2026-06-26
-# Letzte Änderung: 2026-07-03
+# Letzte Änderung: 2026-07-08
 # ENTWICKLER:    Infrastructure Team
 # FUNKTION:      Terraform Provider für Proxmox VE
 # ANWENDUNG:     Automatisierte VM-Provisionierung - Production
