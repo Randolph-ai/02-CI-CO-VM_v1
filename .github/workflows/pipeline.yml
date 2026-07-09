@@ -245,7 +245,7 @@ jobs:
   # ============================================================
   # JOB 4: VM mit Ansible konfigurieren
   # Wartet bis Job 3 (deploy-vm) fertig ist
-  # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar
+  # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar ü
   # ============================================================
   configure-vm:
     # Startet erst wenn deploy-vm UND ansible-security-scan fertig sind
