@@ -205,7 +205,7 @@
     #   Nginx (www-data) kann die Datei lesen → Webseite wird angezeigt
     # ==========================================================
     - name: Eigene index.html erstellen
-      copy:
+      copy:           # 
         content: |
           <!DOCTYPE html>
           <html>
