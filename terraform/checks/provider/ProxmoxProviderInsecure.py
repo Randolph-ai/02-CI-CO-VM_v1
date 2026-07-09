@@ -1,3 +1,29 @@
+# =============================================================================
+# Datei:    ProxmoxProviderInsecure.py
+# Check-ID: CKV_PROXMOX_2
+# Autor:    Randolph Bluming (mit Claude, Session-Datum: 07.07.2026)
+# Projekt:  02-CI-CO-VM_v1 – Phase 2A (Security-Gate)
+#
+# Zweck:
+#   Custom Checkov-Check für das Terraform-Framework. Prüft den
+#   provider "proxmox"-Block und meldet, wenn insecure = true gesetzt
+#   ist (TLS-Zertifikatsprüfung deaktiviert). Im Homelab bewusst so
+#   konfiguriert (self-signed Zertifikat), soll aber als sichtbares,
+#   dokumentiertes Finding erscheinen statt stillschweigend akzeptiert
+#   zu werden.
+#
+# Status: Aktuell per "checkov:skip"-Kommentar in provider.tf mit
+#   Begründung unterdrückt (SKIPPED statt FAILED) - Check selbst läuft
+#   weiterhin bei jedem Scan, siehe provider.tf für den Skip-Kommentar.
+#
+# Wichtiger technischer Hinweis:
+#   Basisklasse-Import in Checkov 3.3.6 ist
+#   "checkov.terraform.checks.provider.base_check.BaseProviderCheck"
+#   (NICHT "base_provider_check", wie ältere Tutorials teils zeigen -
+#   dieser Pfad existiert in 3.3.6 nicht mehr).
+#
+# Ablageort: terraform/checks/provider/ProxmoxProviderInsecure.py
+# =============================================================================
 from checkov.common.models.enums import CheckResult, CheckCategories
 from checkov.terraform.checks.provider.base_check import BaseProviderCheck
 

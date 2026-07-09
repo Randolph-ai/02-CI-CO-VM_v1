@@ -1,3 +1,26 @@
+# =============================================================================
+# Datei:    ProxmoxAgentEnabled.py
+# Check-ID: CKV_PROXMOX_1
+# Autor:    Randolph Bluming (mit Claude, Session-Datum: 07.07.2026)
+# Projekt:  02-CI-CO-VM_v1 – Phase 2A (Security-Gate)
+#
+# Zweck:
+#   Custom Checkov-Check für das Terraform-Framework. Prüft alle
+#   proxmox_virtual_environment_vm-Resources und stellt sicher, dass
+#   agent.enabled = true gesetzt ist. Kritisch, weil Terraform ohne
+#   aktivierten Guest-Agent die IP der VM nach dem Deploy nicht auslesen
+#   kann (Job "deploy-vm" würde ohne diese Einstellung nicht sauber
+#   funktionieren).
+#
+# Warum als eigener Check (nicht durch Checkov-Built-ins abgedeckt):
+#   Checkov hat keine eingebauten Regeln für den Community-Provider
+#   bpg/proxmox (bestätigt am 07.07.2026 durch systematisches Debugging,
+#   u.a. isolierter Minimal-Testfall und direkte Registry-Abfrage). Ein
+#   Standard-"checkov -d terraform/" liefert dafür strukturell 0 Findings,
+#   unabhängig vom tatsächlichen Code-Zustand.
+#
+# Ablageort: terraform/checks/resource/ProxmoxAgentEnabled.py
+# =============================================================================
 from checkov.common.models.enums import CheckResult, CheckCategories
 from checkov.terraform.checks.resource.base_resource_check import BaseResourceCheck
 
