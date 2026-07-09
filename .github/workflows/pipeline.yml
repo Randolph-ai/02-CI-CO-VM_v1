@@ -4,7 +4,7 @@
 # ============================================================
 # Autor:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-07-07
+# Letzte Änderung:2026-07-09
 # Projekt:     CI-CO Setup - Proxmox Infrastructure
 # Zweck:       Vollautomatische Installation von Ubuntu 22.04
 #              Wird von Packer während des Template-Builds verwendet
@@ -211,14 +211,47 @@ jobs:
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
 
 
+# ============================================================
+  # JOB: Ansible Security-Scan (Beobachtungsmodus, Checkov)
+  # Wartet bis Job 3 (deploy-vm) fertig ist
+  # Scannt ansible/ inkl. eigener Custom-Checks (CKV_ANSIBLE_CUSTOM_1)
+  # BEWUSST Soft-Fail: Findings werden angezeigt, aber configure-vm
+  # läuft trotzdem an. Kein Gate wie bei Terraform - erst beobachten.
+  # ============================================================
+  ansible-security-scan:
+    needs: deploy-vm
+    runs-on: [self-hosted, proxmox]
+
+    steps:
+
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Checkov Version prüfen
+        run: checkov --version
+
+      # continue-on-error: true → dieser Step (und damit der ganze Job)
+      # wird als "erfolgreich" gewertet, selbst wenn Checkov FAILED
+      # zurückgibt. configure-vm wartet zwar auf diesen Job, startet
+      # aber trotzdem, egal was der Scan findet - reines Beobachten.
+      - name: Checkov Ansible-Scan (Beobachtungsmodus)
+        continue-on-error: true
+        run: |
+          checkov -d ansible --framework ansible --external-checks-dir ansible/checks --compact
+
+  
   # ============================================================
   # JOB 4: VM mit Ansible konfigurieren
   # Wartet bis Job 3 (deploy-vm) fertig ist
   # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar
   # ============================================================
   configure-vm:
-    # Startet erst wenn Job 2 erfolgreich war
-    needs: deploy-vm
+    # Startet erst wenn deploy-vm UND ansible-security-scan fertig sind
+    # (ansible-security-scan ist Soft-Fail, blockiert configure-vm aber
+    # trotzdem nie wirklich - continue-on-error sorgt dafür)
+    needs: [deploy-vm, ansible-security-scan]
     runs-on: [self-hosted, proxmox]
 
     steps:
