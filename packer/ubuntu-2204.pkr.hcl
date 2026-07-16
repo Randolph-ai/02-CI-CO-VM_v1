@@ -1,6 +1,3 @@
-#**************************************************************
-#*2026-07-03** von DeepSeek formattiert ***********************
-#**************************************************************
 # ============================================================
 # PACKER KONFIGURATION - UBUNTU 22.04 TEMPLATE
 # ============================================================
@@ -9,23 +6,11 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-07-02
+# Letzte Änderung: 2026-07-10
 # ============================================================
-
-# ============================================================
-# PACKER-TEMPLATE: Ubuntu 22.04 via Cloud-Image + proxmox-clone
-# ============================================================
-# ZWECK:   Ersetzt den ISO-basierten Ansatz komplett
-#          Schneller und zuverlässiger durch Cloud-Image
-#
-# QUELLE:  VM 9000 (ubuntu-2204-cloudinit-base)
-#          Einmalig manuell aus Ubuntu-Cloud-Image erstellt
-#          (siehe Session-Notizen)
-#
-# ZIEL:    Template 2000 (ubuntu-2204-golden)
-#          Wird von Terraform für alle VMs verwendet
-# ============================================================
-
+# ========================
+# required_plugins
+# ========================
 packer {
   required_plugins {
     proxmox = {
