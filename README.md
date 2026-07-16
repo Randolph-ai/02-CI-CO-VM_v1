@@ -20,6 +20,7 @@
 - [Nutzung](#nutzung)
 - [Konfiguration](#konfiguration)
 - [Fehlerbehebung](#fehlerbehebung)
+- [Zukunftsausblick & Next Steps](#-zukunftsausblick--next-steps-ai-driven-siem--monitoring)
 
 ---
 
@@ -174,3 +175,13 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 | Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check, sieht wie fehlende Checks aus | Ohne `--check`-Filter testen, um alle Checks gemeinsam zu sehen |
 | Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder Check-Ordner liegt nicht unter `terraform/checks/{resource,provider}/` | Ordnerstruktur und Dateinamen exakt prüfen; direkter `importlib`-Test macht den echten Fehler sichtbar (Checkov selbst loggt das oft nur als leises `INFO`) |
 
+---
+
+## 🚀 Zukunftsausblick & Next Steps: AI-Driven SIEM & Monitoring
+
+Nach dem erfolgreichen Abschluss der IaC-Phasen wird das Framework um eine automatisierte Sicherheitsüberwachung (SOC-in-a-Box) erweitert:
+
+- **Automated Deployment:** Ansible-gestützte Instanziierung von Netzwerk-Sensoren (**Zeek / Snort**) auf den Ziel-VMs sowie ein zentraler Log-Cluster (**Grafana / OpenSearch**).
+- **Data Pipeline:** Automatisierter Versand von System- und Netzwerktracks (via Promtail/Beats) an das zentrale SIEM.
+- **AI-Driven Analytics:** Eigenständige Python-Pipeline unter Verwendung von **Pandas** zur Anomalie-Erkennung in Log-Strukturen.
+- **Automated Reporting:** Integration von AI-Modellen (LLMs) zur automatisierten Kontext-Evaluierung von Sicherheitsvorfällen und Generierung von *Executive Security Compliance Reports*.
