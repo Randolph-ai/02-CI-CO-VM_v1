@@ -12,11 +12,6 @@
 
 name: Proxmox CI/CD Pipeline
 
-# ---- SICHERHEIT ----
-# Nur Lesezugriff auf das Repository
-permissions:
-  contents: read
-
 # ---- TRIGGER ----
 # Pipeline startet automatisch bei:
 on:
@@ -35,12 +30,16 @@ on:
       - 'ansible/**'
       - '.github/workflows/pipeline.yml'
 
+# ---- SICHERHEIT ----
+# Nur Lesezugriff auf das Repository
+permissions:
+  contents: read
+
 jobs:
   # ============================================================
   # JOB 1: VM-Template mit Packer bauen
   # Ergebnis: Template "ubuntu-2204-template" liegt in Proxmox
   # ============================================================
-
   build-template:
     # Läuft auf deiner Ubuntu-VM in Proxmox
     # Nicht auf GitHub-Servern → kann Proxmox erreichen
@@ -274,26 +273,35 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/gh_actions_deploy_key
           chmod 600 ~/.ssh/gh_actions_deploy_key
 
-      # Die VM braucht Zeit zum Hochfahren nach dem Deploy
-      # Ohne Warten schlägt Ansible sofort fehl
-      # Versucht 30x alle 10 Sekunden = max 5 Minuten
+      
+      # Sicherheitscheck: Wenn nach 30 Versuchen keine Verbindung möglich → Pipeline abbrechen
+      # Besser Fehler sehen als mit falscher IP weitermachen
       - name: Warten bis VM erreichbar ist
         env:
-          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}   # ← IP kommt von Job 2
+          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }} #  <- IP kommt von Job 3 (deploy-vm)
         run: |
           echo "Warte auf VM: $VM_IP"
+
+          SSH_OK=false
           for i in {1..30}; do
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
                    -i ~/.ssh/gh_actions_deploy_key \
                    randolph@$VM_IP 'echo ok' 2>/dev/null; then
               echo "✅ VM ist erreichbar!"
+              SSH_OK=true
               break
             fi
             echo "Versuch $i/30 - warte 10 Sekunden..."
             sleep 10
           done
 
+          if [ "$SSH_OK" = false ]; then
+            echo "❌ FEHLER: VM nach 30 Versuchen nicht erreichbar!"
+            exit 1
+          fi
+
+          
       # Speichert den SSH-Fingerabdruck der VM
       # Verhindert die interaktive "Are you sure?" Frage
       - name: SSH Fingerabdruck speichern
