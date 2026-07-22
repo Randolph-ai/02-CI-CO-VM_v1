@@ -6,7 +6,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-07-10
+# Letzte Änderung: 2026-07-19
 # ============================================================
 # ========================
 # required_plugins
@@ -54,6 +54,12 @@ variable "proxmox_password" {
   #    └── SENSITIVE! Wird nicht in Logs ausgegeben
   #        Aus Umgebungsvariable gelesen aus git secrets
   #        z.B. export PROXMOX_PASSWORD="secret"
+  
+  # HINWEIS Dual-Auth: Packer nutzt hier Passwort, Terraform (siehe
+  # terraform/variables.tf) nutzt API-Token. Historisch gewachsen.
+  # Passwort = volle Rechte, nur per Passwortänderung widerrufbar.
+  # Token = granular einschränkbar, einzeln widerrufbar.
+
 }
 
 # ============================================================
@@ -228,6 +234,17 @@ build {
       #        Ermöglicht IP-Abfrage durch Proxmox
       "sudo apt-get install -y qemu-guest-agent",
       "sudo systemctl enable qemu-guest-agent",
+    
+    #=====================
+
+    # NEU:  20.07.26 CIS-Härtung: SSH-Passwort-Login global sperren
+    # Begründung: In der kompletten Kette (VM 9000 → Packer-Build →
+    # Template 2000 → Terraform-VM) wird ausschließlich Key-Auth
+    # genutzt (randolph beim Build, ubuntu in Produktion). Diese
+    # Einstellung schließt lediglich einen ungenutzten Zugangsweg.
+    "sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config",
+    "sudo systemctl restart sshd",
+    #=====================
       
       # ---- CLOUD-INIT CLEANUP ----
       # Bereinigt Cloud-Init für nächsten Start
@@ -242,7 +259,8 @@ build {
       #    └── Jede VM bekommt beim ersten Start eine neue ID
       #        Wichtig für DHCP und Netzwerk-Kommunikation
       "sudo rm -f /etc/machine-id",
-      "sudo touch /etc/machine-id"
+      "sudo touch /etc/machine-id",
+      "sudo userdel -f -r randolph"   # ← jetzt als letzter Befehl im gesamten Block
     ]
   }
 }
