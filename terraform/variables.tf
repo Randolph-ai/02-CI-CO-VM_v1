@@ -3,7 +3,7 @@
 # ============================================================
 # AUTOR:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-06-28 
+# Letzte Änderung:2026-07-19 
 # FUNKTION:    Variablen für EINE VM (Web-Server)
 # VERSION:     2.0.0
 # ÄNDERUNG:    DB-Server Variablen entfernt
@@ -31,6 +31,11 @@ variable "pm_api_url" {
 variable "pm_api_token_id" {
   description = "Proxmox API Token ID (Format: user@realm!tokenname)"
   type        = string
+  # HINWEIS Dual-Auth: Terraform nutzt hier API-Token (kein default,
+  # kommt automatisch über TF_VAR_pm_api_token_id aus der Umgebung).
+  # Packer (siehe packer/ubuntu-2204.pkr.hcl) nutzt dagegen Passwort.
+  # Historisch gewachsen, Details siehe README.
+
 }
 
 variable "pm_api_token_secret" {
