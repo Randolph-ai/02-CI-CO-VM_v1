@@ -4,7 +4,7 @@
 # ============================================================
 # Autor:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-07-18
+# Letzte Änderung:2026-07-22
 # Projekt:     CI-CO Setup - Proxmox Infrastructure
 # Zweck:       Vollautomatische Installation von Ubuntu 22.04
 #              Wird von Packer während des Template-Builds verwendet
