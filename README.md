@@ -25,7 +25,6 @@
 - [Zukunftsausblick & Next Steps](#-zukunftsausblick--next-steps-ai-driven-siem--monitoring)
 
 ---
-
 ## 🎯 Projektübersicht
 
 ![Proxmox CI/CD Pipeline](docs/images/pipeline-diagramm.png)
