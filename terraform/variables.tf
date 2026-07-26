@@ -25,7 +25,10 @@
 variable "pm_api_url" {
   description = "Proxmox API Endpoint"
   type        = string
-  # Kein default → MUSS in terraform.tfvars angegeben werden
+  # Kein default. Wird in der Pipeline automatisch über TF_VAR_pm_api_url
+  # aus GitHub Secrets befüllt. Für lokale manuelle Runs alternativ per
+  # terraform.tfvars oder -var-Flag setzbar (nur einer der beiden Wege
+  # gleichzeitig aktiv, siehe Session 16.07.)
 }
 
 variable "pm_api_token_id" {
