@@ -2,6 +2,7 @@
 
 > Automatisierte Infrastructure-as-Code Pipeline mit Packer, Terraform, Ansible, GitHub Actions und Checkov Custom Policy Checks
 
+
 ![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-orange)
 ![Proxmox](https://img.shields.io/badge/Proxmox-7.x-red)
@@ -27,6 +28,7 @@
 
 ## 🎯 Projektübersicht
 
+![Proxmox CI/CD Pipeline](docs/images/pipeline-diagramm.png)
 Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Infrastruktur auf Proxmox VE mittels Infrastructure-as-Code (IaC). Ein hartes Security-Gate (Terraform-Seite) sowie ein ergänzendes Soft-Gate (Ansible-Seite) verhindern bzw. dokumentieren fehlerhafte Deployments.
 
 | Komponente | Aufgabe |
