@@ -15,6 +15,7 @@
 - [Technologie-Stack](#technologie-stack)
 - [Projektstruktur](#projektstruktur)
 - [Security-Gate mit Checkov](#security-gate-mit-checkov)
+- [Dual-Authentifizierung: Packer vs. Terraform](#-dual-authentifizierung-packer-vs-terraform)
 - [Voraussetzungen](#voraussetzungen)
 - [Installation & Setup](#installation--setup)
 - [Nutzung](#nutzung)
@@ -26,15 +27,15 @@
 
 ## 🎯 Projektübersicht
 
-Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Infrastruktur auf Proxmox VE mittels Infrastructure-as-Code (IaC). Ein hartes Security-Gate verhindert fehlerhafte Deployments.
+Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Infrastruktur auf Proxmox VE mittels Infrastructure-as-Code (IaC). Ein hartes Security-Gate (Terraform-Seite) sowie ein ergänzendes Soft-Gate (Ansible-Seite) verhindern bzw. dokumentieren fehlerhafte Deployments.
 
 | Komponente | Aufgabe |
 |------------|---------|
 | **Packer** | Erstellt ein Ubuntu 22.04 Golden-Image-Template (Cloud-Image-basiert, `proxmox-clone`-Builder) |
 | **Terraform** | Provisioniert VMs auf Proxmox mittels `bpg/proxmox` Provider |
-| **Checkov** | Validiert IaC auf Security-Policies **vor** dem Deploy (hartes Gate, kein Soft-Fail) |
+| **Checkov** | Validiert IaC auf Security-Policies **vor** dem Deploy (Terraform: hartes Gate, Ansible: Soft-Gate) |
 | **Ansible** | Konfiguriert Nginx auf den VMs |
-| **GitHub Actions** | Automatisiert die komplette Pipeline inkl. Security-Gate (self-hosted Runner) |
+| **GitHub Actions** | Automatisiert die komplette Pipeline inkl. beider Security-Gates (self-hosted Runner) |
 
 ---
 
@@ -44,7 +45,7 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 |------|---------|-------|
 | Packer | 1.9+ (Proxmox-Plugin gepinnt auf `1.1.8`) | Template-Erstellung |
 | Terraform | 1.5+ | Infrastructure Provisioning |
-| Checkov | 3.3.6 | Policy-as-Code Security-Scanning |
+| Checkov | 3.3.6 | Policy-as-Code Security-Scanning (Terraform- und Ansible-Framework) |
 | Ansible | 2.14+ | Configuration Management |
 | Proxmox VE | 7.x/8.x | Virtualisierungsplattform |
 | Ubuntu | 22.04 LTS | Betriebssystem (Cloud-Image) |
@@ -54,7 +55,7 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 ## 📁 Projektstruktur
 
 ### Hauptverzeichnis
-- **`.github/workflows/pipeline.yml`** - GitHub Actions Pipeline mit Security-Gate
+- **`.github/workflows/pipeline.yml`** - GitHub Actions Pipeline mit beiden Security-Gates
 - **`README.md`** - Projektdokumentation
 
 ### Packer
@@ -81,22 +82,29 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 ### Ansible
 - **`ansible/inventory.ini`** - Wird pro Pipeline-Lauf dynamisch aus der Terraform-Output-IP erzeugt
 - **`ansible/playbook.yml`** - Nginx-Setup (Firewall, Service, individuelle index.html)
+- **`ansible/checks/task/`** - Custom Checkov Security Check für Ansible-Tasks
+    - **`__init__.py`** - Python Package Marker
+    - **`CopyModeNotWorldWritable.py`** - `CKV_ANSIBLE_CUSTOM_1`: Meldet world-writable Dateiberechtigungen bei `copy`/`template`-Tasks
 
 ---
 
 ## 🔒 Security-Gate mit Checkov
 
-Die Pipeline enthält ein **hartes** Security-Gate mittels Custom Checkov Checks (kein `continue-on-error`, kein `|| true`). Verstöße gegen die Policies stoppen die Pipeline **vor** dem `terraform apply` – `deploy-vm` und `configure-vm` starten in diesem Fall gar nicht erst.
+Die Pipeline enthält **zwei** Checkov-Gates mit unterschiedlicher Härte:
+
+- **Terraform-Seite (hart):** Kein `continue-on-error`, kein `|| true`. Verstöße stoppen die Pipeline **vor** dem `terraform apply` – `deploy-vm`, `ansible-security-scan` und `configure-vm` starten in diesem Fall gar nicht erst.
+- **Ansible-Seite (weich):** Läuft mit `continue-on-error: true`. Verstöße werden im Report sichtbar, blockieren `configure-vm` aber bewusst nicht (Ansible-Konfiguration wird als weniger kritisch für den sofortigen Stopp eingestuft als die Infrastruktur-Ebene).
 
 ### Implementierte Custom Checks
 
-| ID | Name | Prüft | Status im Projekt |
-|----|------|-------|------|
-| `CKV_PROXMOX_1` | ProxmoxAgentEnabled | `agent.enabled = true` muss gesetzt sein (sonst kann Terraform die VM-IP nicht auslesen) | Aktiv, PASSED |
-| `CKV_PROXMOX_2` | ProxmoxProviderInsecure | `insecure = true` im `provider`-Block (TLS-Verifikation deaktiviert) | Aktiv, bewusst geskippt (siehe unten) |
-| `CKV_PROXMOX_3` | ProxmoxDiskMemorySet | Mindestwerte `memory.dedicated >= 2048` MB und `disk.size >= 40` GB | Aktiv, PASSED |
+| ID | Name | Framework | Prüft | Status im Projekt |
+|----|------|-----------|-------|------|
+| `CKV_PROXMOX_1` | ProxmoxAgentEnabled | Terraform | `agent.enabled = true` muss gesetzt sein (sonst kann Terraform die VM-IP nicht auslesen) | Aktiv, PASSED |
+| `CKV_PROXMOX_2` | ProxmoxProviderInsecure | Terraform | `insecure = true` im `provider`-Block (TLS-Verifikation deaktiviert) | Aktiv, bewusst geskippt (siehe unten) |
+| `CKV_PROXMOX_3` | ProxmoxDiskMemorySet | Terraform | Mindestwerte `memory.dedicated >= 2048` MB und `disk.size >= 40` GB | Aktiv, PASSED |
+| `CKV_ANSIBLE_CUSTOM_1` | CopyModeNotWorldWritable | Ansible | World-writable Dateiberechtigungen (Oktal-Endziffer 2/3/6/7) bei `copy`/`template`-Tasks | Aktiv, PASSED |
 
-**Hintergrund:** Checkov hat keine eingebauten Regeln für den Community-Provider `bpg/proxmox` – alle drei Checks oben sind projektspezifische Eigenentwicklungen, keine Standard-Checkov-Policies.
+**Hintergrund:** Checkov hat keine eingebauten Regeln für den Community-Provider `bpg/proxmox` – die drei Terraform-Checks oben sind projektspezifische Eigenentwicklungen. Der Ansible-Check schließt eine Lücke, die die eingebauten Ansible-Checkov-Regeln nicht abdecken (keine Prüfung von Datei-Berechtigungen bei `copy`/`template`).
 
 ### Tech-Schuld dokumentieren mit `checkov:skip`
 
@@ -110,7 +118,31 @@ Bewusst akzeptierte Ausnahmen werden als dokumentierte Tech-Schuld direkt im Cod
 insecure = true
 ```
 
-`CKV_PROXMOX_1` und `CKV_PROXMOX_3` sind aktuell ungeskippt und müssen PASSED liefern, damit das Gate grün wird.
+`CKV_PROXMOX_1`, `CKV_PROXMOX_3` und `CKV_ANSIBLE_CUSTOM_1` sind aktuell ungeskippt und müssen PASSED liefern, damit das jeweilige Gate grün wird (beim Ansible-Check nur im Sinne des Reports, da Soft-Gate).
+
+---
+
+## 🔐 Dual-Authentifizierung: Packer vs. Terraform
+
+Das Projekt nutzt bewusst zwei unterschiedliche Authentifizierungsmechanismen
+gegen die Proxmox-API. Historisch gewachsen, aber dokumentiert statt
+stillschweigend inkonsistent.
+
+| | Packer | Terraform |
+|---|---|---|
+| Auth-Typ | Benutzername/Passwort (`PROXMOX_USER`/`PROXMOX_PASSWORD`) | API-Token (`pm_api_token_id`/`pm_api_token_secret`) |
+| Widerruf | Nur durch globale Passwortänderung (betrifft alle Nutzer dieses Kontos) | Einzeln widerrufbar, ohne andere Zugänge zu beeinflussen |
+| Rechteumfang | Volle Kontorechte | Granular einschränkbar über Proxmox API-Token-Permissions |
+
+**Warum nicht vereinheitlicht:** Beide Tools unterstützen technisch beide
+Auth-Typen (der `bpg/proxmox`-Provider akzeptiert auch Passwort-Auth). Die
+Trennung ist keine funktionale Notwendigkeit, sondern historisch entstanden.
+Eine Vereinheitlichung auf Token für beide Tools ist als mögliche künftige
+Verbesserung vorgemerkt.
+
+**Injection-Mechanismus (eigene Ebene, nicht mit dem Auth-Typ zu verwechseln):**
+- Packer: `env("PROXMOX_PASSWORD")` explizit im HCL-Code (Packer-eigene Syntax)
+- Terraform: automatischer `TF_VAR_`-Präfix aus der Umgebung (Terraform-Konvention, kein expliziter Code-Aufruf nötig)
 
 ---
 
@@ -141,16 +173,17 @@ insecure = true
 
 ## ▶️ Nutzung
 
-Ein Push auf `main` löst die Pipeline mit vier aufeinander aufbauenden Jobs aus:
+Ein Push auf `main` löst die Pipeline mit fünf aufeinander aufbauenden Jobs aus:
 
 ```
-build-template   → Packer baut/erneuert das Golden-Image-Template
-security-scan    → Checkov-Gate (siehe oben) – hartes Stop bei Verstoß
-deploy-vm        → Terraform provisioniert die VM aus dem Template
-configure-vm     → Ansible konfiguriert Nginx auf der VM
+build-template          → Packer baut/erneuert das Golden-Image-Template
+security-scan           → Checkov-Gate, Terraform (hart) – Stop bei Verstoß
+deploy-vm               → Terraform provisioniert die VM aus dem Template
+ansible-security-scan   → Checkov-Gate, Ansible (weich) – Report, kein Stop
+configure-vm            → Ansible konfiguriert Nginx auf der VM
 ```
 
-Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden `deploy-vm` und `configure-vm` gar nicht erst gestartet (als "Skipped" markiert, 0 Sekunden Laufzeit).
+Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden `deploy-vm`, `ansible-security-scan` und `configure-vm` gar nicht erst gestartet (als "Skipped" markiert, 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate, `continue-on-error: true`).
 
 Nach einem erfolgreichen Lauf ist die VM über die von Terraform ausgegebene IP erreichbar (`terraform output -raw vm_ip`), Nginx liefert dort eine mit Live-Facts (Hostname, IP) generierte `index.html`.
 
@@ -173,7 +206,7 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 | Terraform will VM erneut anlegen, obwohl sie läuft | `terraform.tfstate` ging beim Checkout verloren (self-hosted Runner mit geteiltem Arbeitsordner) | `clean: false` bei **allen** `actions/checkout`-Schritten setzen, nicht nur bei einem Job |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` bei SSH | VM wurde unter gleicher IP neu aufgebaut, neuer Host-Key | `ssh-keygen -f ~/.ssh/known_hosts -R '<ip>'` |
 | Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check, sieht wie fehlende Checks aus | Ohne `--check`-Filter testen, um alle Checks gemeinsam zu sehen |
-| Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder Check-Ordner liegt nicht unter `terraform/checks/{resource,provider}/` | Ordnerstruktur und Dateinamen exakt prüfen; direkter `importlib`-Test macht den echten Fehler sichtbar (Checkov selbst loggt das oft nur als leises `INFO`) |
+| Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder Check-Ordner liegt nicht an der erwarteten Stelle unter `--external-checks-dir` | Ordnerstruktur und Dateinamen exakt prüfen; direkter `importlib`-Test macht den echten Fehler sichtbar (Checkov selbst loggt das oft nur als leises `INFO`) |
 
 ---
 
