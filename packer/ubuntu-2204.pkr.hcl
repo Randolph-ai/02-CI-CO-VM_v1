@@ -6,7 +6,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-07-28
+# Letzte Änderung: 2026-07-29
 # ============================================================
 # ========================
 # required_plugins
@@ -290,8 +290,30 @@ build {
       "printf '%s\\n' '#clear Unattended-Upgrade::Allowed-Origins;' 'Unattended-Upgrade::Allowed-Origins {' '    \"Ubuntu:jammy-security\";' '};' | sudo tee /etc/apt/apt.conf.d/51security-only > /dev/null",
       "sudo dpkg-reconfigure -f noninteractive unattended-upgrades",
       "systemctl is-enabled unattended-upgrades",
+        
       #=====================
-      
+      # NEU: 29.07.26 CIS-Härtung: Unnötige Dienste deaktivieren
+      #
+      # Ubuntu-Cloud-Images sind "Universal-Images" für verschiedene
+      # Plattformen - dadurch bringen sie Dienste mit, die auf unserer
+      # Proxmox/KVM-Umgebung nie gebraucht werden. Jeder unnötig laufende
+      # Dienst ist unnötige Angriffsfläche ("Minimal Attack Surface").
+      #
+      # Gruppe 1: Fremde Hypervisor-Werkzeuge (VMware/LXD, nicht Proxmox/KVM)
+      "sudo systemctl disable --now open-vm-tools.service",
+      "sudo systemctl disable --now vgauth.service",
+      "sudo systemctl disable --now lxd-agent.service",
+      "sudo systemctl disable --now snap.lxd.activate.service",
+      #
+      # Gruppe 2: Nicht genutzte Storage-Protokolle (kein SAN/iSCSI im Homelab)
+      "sudo systemctl disable --now multipathd.service",
+      "sudo systemctl disable --now open-iscsi.service",
+      #
+      # Gruppe 3: Nicht genutzte Ubuntu-spezifische Dienste
+      "sudo systemctl disable --now ubuntu-advantage.service",
+      "sudo systemctl disable --now ua-reboot-cmds.service",
+      "sudo systemctl disable --now pollinate.service",
+
       #=====================
       # ---- CLOUD-INIT CLEANUP ----
       # Bereinigt Cloud-Init für nächsten Start
