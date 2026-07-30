@@ -163,7 +163,7 @@ resource "proxmox_virtual_environment_vm" "web_server" {
 
     user_account {
           username = "ansible"
-          keys     = [trimspace(file(var.ssh_public_key))]
+          keys     = [trimspace(var.ssh_public_key)]
         }
 
       }

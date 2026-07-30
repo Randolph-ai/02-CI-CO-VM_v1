@@ -163,6 +163,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Zeigt was Terraform tun WILL — noch keine Änderung
       # Gut zum Verstehen und Kontrollieren
@@ -174,6 +175,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Jetzt wird die VM wirklich erstellt
       # -auto-approve = keine manuelle Bestätigung nötig
@@ -185,6 +187,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Liest die IP-Adresse aus Terraform aus
       # und speichert sie damit Job 3 sie verwenden kann
