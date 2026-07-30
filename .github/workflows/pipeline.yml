@@ -163,6 +163,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Zeigt was Terraform tun WILL — noch keine Änderung
       # Gut zum Verstehen und Kontrollieren
@@ -174,6 +175,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Jetzt wird die VM wirklich erstellt
       # -auto-approve = keine manuelle Bestätigung nötig
@@ -185,6 +187,7 @@ jobs:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # Liest die IP-Adresse aus Terraform aus
       # und speichert sie damit Job 3 sie verwenden kann
@@ -287,7 +290,7 @@ jobs:
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
                    -i ~/.ssh/gh_actions_deploy_key \
-                   randolph@$VM_IP 'echo ok' 2>/dev/null; then
+                   ansible@$VM_IP 'echo ok' 2>/dev/null; then
               echo "✅ VM ist erreichbar!"
               SSH_OK=true
               break
@@ -323,7 +326,7 @@ jobs:
           # Wird bei jedem Pipeline-Run neu geschrieben
           cat > inventory.ini << EOF
           [webserver]
-          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+          $VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
 
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
@@ -331,7 +334,7 @@ jobs:
 
           # Playbook ausführen
           ansible-playbook -i inventory.ini playbook.yml \
-            --user randolph \
+            --user ansible \
             --private-key ~/.ssh/gh_actions_deploy_key \
             --extra-vars "vm_host=$VM_IP"
 

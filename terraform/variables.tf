@@ -64,9 +64,8 @@ variable "template_vm_id" {
 }
 
 variable "ssh_public_key" {
-  description = "Pfad zum öffentlichen SSH-Key"
+  description = "Inhalt des öffentlichen SSH-Keys (nicht der Pfad)"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
 }
 
 # ============================================================
