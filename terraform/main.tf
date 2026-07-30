@@ -162,7 +162,7 @@ resource "proxmox_virtual_environment_vm" "web_server" {
     #        Der öffentliche Key wird in die VM eingespielt
 
     user_account {
-          username = "randolph"
+          username = "ansible"
           keys     = [trimspace(file(var.ssh_public_key))]
         }
 

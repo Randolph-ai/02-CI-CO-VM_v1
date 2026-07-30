@@ -323,7 +323,7 @@ jobs:
           # Wird bei jedem Pipeline-Run neu geschrieben
           cat > inventory.ini << EOF
           [webserver]
-          $VM_IP ansible_user=randolph ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+          $VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
 
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
@@ -331,7 +331,7 @@ jobs:
 
           # Playbook ausführen
           ansible-playbook -i inventory.ini playbook.yml \
-            --user randolph \
+            --user ansible \
             --private-key ~/.ssh/gh_actions_deploy_key \
             --extra-vars "vm_host=$VM_IP"
 
