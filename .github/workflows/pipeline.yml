@@ -290,7 +290,7 @@ jobs:
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
                    -i ~/.ssh/gh_actions_deploy_key \
-                   randolph@$VM_IP 'echo ok' 2>/dev/null; then
+                   ansible@$VM_IP 'echo ok' 2>/dev/null; then
               echo "✅ VM ist erreichbar!"
               SSH_OK=true
               break
