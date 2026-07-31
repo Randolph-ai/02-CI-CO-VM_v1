@@ -40,6 +40,11 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 | **Ansible** | Konfiguriert Nginx auf den VMs |
 | **GitHub Actions** | Automatisiert die komplette Pipeline inkl. beider Security-Gates (self-hosted Runner) |
 
+**Hinweis zur Phasen-Nummerierung:** Die Security-Erweiterung des Projekts läuft in benannten, aufeinander aufbauenden Phasen (2A, 2B, 2C, ...) – jede Referenz auf "Phase X" in diesem Dokument bezieht sich auf diese interne Roadmap, nicht auf einen externen Standard:
+- **Phase 2A** – Statisches Security-Gate (Checkov) in die Pipeline integriert *(abgeschlossen)*
+- **Phase 2B** – CIS-Härtung des Packer-Golden-Images *(abgeschlossen)*
+- **Phase 2C** – Zweite VM aus dem gehärteten Image, Wiederholung des Terraform-Musters *(in Planung)*
+
 ---
 
 ## 🛠 Technologie-Stack
@@ -117,7 +122,7 @@ Bewusst akzeptierte Ausnahmen werden als dokumentierte Tech-Schuld direkt im Cod
 ```hcl
 # checkov:skip=CKV_PROXMOX_2: Homelab mit self-signed Zertifikat,
 # kein produktives TLS-Ziel vorhanden. Bewusst akzeptiertes Risiko,
-# dokumentiert und verifiziert in Phase 2A.
+# dokumentiert und verifiziert in Phase 2A (siehe Phasen-Hinweis oben).
 insecure = true
 ```
 
