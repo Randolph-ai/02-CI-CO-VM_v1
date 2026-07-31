@@ -3,7 +3,7 @@
 > Automatisierte Infrastructure-as-Code Pipeline mit Packer, Terraform, Ansible, GitHub Actions und Checkov Custom Policy Checks
 
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-orange)
 ![Proxmox](https://img.shields.io/badge/Proxmox-7.x-red)
 ![Checkov](https://img.shields.io/badge/Checkov-3.3+-brightgreen)
@@ -16,7 +16,9 @@
 - [Technologie-Stack](#technologie-stack)
 - [Projektstruktur](#projektstruktur)
 - [Security-Gate mit Checkov](#security-gate-mit-checkov)
+- [CIS-Härtung des Golden Images](#-cis-härtung-des-golden-images-phase-2b)
 - [Dual-Authentifizierung: Packer vs. Terraform](#-dual-authentifizierung-packer-vs-terraform)
+- [SSH-Key-Architektur: Build vs. Produktiv](#-ssh-key-architektur-build-vs-produktiv)
 - [Voraussetzungen](#voraussetzungen)
 - [Installation & Setup](#installation--setup)
 - [Nutzung](#nutzung)
@@ -123,6 +125,22 @@ insecure = true
 
 ---
 
+## 🛡️ CIS-Härtung des Golden Images (Phase 2B)
+
+Das Packer-Template wird vor der Auslieferung nach CIS-Benchmark-Prinzipien gehärtet – Security als integraler Bestandteil des Image-Builds, nicht als nachträglicher Schritt:
+
+| Maßnahme | Umsetzung |
+|---|---|
+| SSH-Passwort-Login | Global gesperrt (`PasswordAuthentication no`), ausschließlich Key-Auth über die gesamte Kette |
+| Firewall-Baseline | UFW aktiv, Default-Deny eingehend, nur Ports 22/80/443 erlaubt |
+| Security-Updates | `unattended-upgrades`, ausschließlich Security-Only-Kanal (keine regulären Feature-Updates) |
+| Unnötige Dienste | Neun Dienste deaktiviert (VMware/LXD-Gast-Tools, iSCSI/Multipath, Ubuntu-Advantage, Pollinate) |
+| Build-User-Cleanup | Temporärer Packer-Build-User wird als letzter Schritt im Provisioner entfernt (`userdel`) |
+
+Jede Maßnahme ist über einen vollständigen Packer-Build plus Verifikation gegen eine Wegwerf-VM (`qm guest exec`) bestätigt, bevor sie als abgeschlossen gilt.
+
+---
+
 ## 🔐 Dual-Authentifizierung: Packer vs. Terraform
 
 Das Projekt nutzt bewusst zwei unterschiedliche Authentifizierungsmechanismen
@@ -147,6 +165,24 @@ Verbesserung vorgemerkt.
 
 ---
 
+## 🔑 SSH-Key-Architektur: Build vs. Produktiv
+
+Analog zur Dual-Authentifizierung auf Proxmox-API-Ebene wird auch beim SSH-Zugriff **innerhalb** der VMs strikt zwischen Build- und Produktivzugang getrennt – zwei unabhängige Schlüsselpaare für zwei unabhängige Vertrauenszonen:
+
+| | Packer (Build) | Terraform/Ansible (Produktiv) |
+|---|---|---|
+| Privater Key | `id_ed25519` | `id_ed25519_terraform` |
+| Username | temporär, wird als letzter Provisioner-Schritt per `userdel` entfernt | `ansible` (dauerhaft) |
+| Lebensdauer des Zugangs | Minuten (nur während des Builds) | Dauerhaft (solange die VM läuft) |
+| Verbindungsweg | Packer verbindet sich aktiv per SSH gegen die Build-VM | Terraform spricht **ausschließlich** mit der Proxmox-API, nie per SSH – Ansible verbindet sich aktiv per SSH gegen die fertige VM |
+| Key-Übergabe an die VM | Direkt durch Packers `proxmox-clone`-Builder | Terraform platziert nur den **Public Key** via Cloud-Init (separates virtuelles CD-ROM-Medium, gelesen ausschließlich beim allerersten Boot einer neuen Instance-ID) |
+
+**Warum getrennt und nicht ein gemeinsamer Key:** Ein gestohlener Build-Key öffnet nur eine VM, die es in Kürze ohnehin nicht mehr gibt (Blast-Radius-Begrenzung). Bei einem gemeinsamen Key hätte derselbe Diebstahl dauerhaften Zugriff auf die laufende Produktions-VM bedeutet. Ein Angreifer müsste bei getrennten Keys zwei unabhängige Diebstähle erfolgreich durchführen statt nur einen.
+
+**Variable als Wert statt als Pfad:** `var.ssh_public_key` in `terraform.tfvars` enthält den Public-Key-**Inhalt** direkt (kein `file()`-Aufruf, kein Dateipfad). Grund: Ein Pfad mit `~` wird von Terraform nicht wie in der Bash-Shell automatisch aufgelöst, und der GitHub-Actions-Runner checkt das Repo ohnehin in ein komplett anderes Arbeitsverzeichnis aus, in dem eine lokale `terraform.tfvars` gar nicht existiert. Der Key-Inhalt kommt in der Pipeline stattdessen aus dem GitHub Secret `SSH_PUBLIC_KEY` (`TF_VAR_ssh_public_key`).
+
+---
+
 ## ⚙️ Voraussetzungen
 
 - Proxmox VE Host, erreichbar über die API (`https://<proxmox-ip>:8006/api2/json`)
@@ -155,7 +191,11 @@ Verbesserung vorgemerkt.
 - GitHub Secrets gesetzt:
   - `PROXMOX_URL`, `PROXMOX_USER`, `PROXMOX_PASSWORD` (für Packer)
   - `TF_VAR_*`-Secrets passend zu den in `variables.tf` deklarierten Variablen (für Terraform)
-  - `SSH_PRIVATE_KEY` (temporärer Key für den Ansible-Zugriff auf die frisch deployte VM – getrennt vom dauerhaften Packer-SSH-Key)
+  - `SSH_PRIVATE_KEY` (dauerhafter Produktiv-Key für Terraform/Ansible,
+    User `ansible` – strikt getrennt vom temporären, nur build-lebendigen
+    Packer-SSH-Key, siehe Abschnitt [SSH-Key-Architektur](#-ssh-key-architektur-build-vs-produktiv))
+  - `SSH_PUBLIC_KEY` (öffentlicher Gegenpart, wird als `TF_VAR_ssh_public_key`
+    an Terraform übergeben)
 - Eine bereits existierende Cloud-Image-Basis-VM (Template, standardmäßig VM-ID `9000`) als Klon-Quelle für Packer
 
 ## 🔧 Installation & Setup

@@ -10,3 +10,17 @@ packer/*.pkrvars.hcl
 packer/packer_cache/
 __pycache__/
 *.pyc
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Ansible
+*.retry
+
+# Python (lokale venvs, falls für Checkov-Checks genutzt)
+venv/
+.venv/
