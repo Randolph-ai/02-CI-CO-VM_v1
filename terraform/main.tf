@@ -154,13 +154,11 @@ resource "proxmox_virtual_environment_vm" "web_server" {
       }
     }
 
-    # ---- BENUTZER & SSH-KEY ----
-    # Zugangsdaten für die VM
-    #    │
-    #    └── username "randolph" = MUSS mit Packer übereinstimmen!
-    #        SSH-Key wird aus Datei gelesen
-    #        Der öffentliche Key wird in die VM eingespielt
 
+    # ---- BENUTZERKONTO ----
+    # Erstellt einen Benutzer "ansible" mit SSH-Key
+    #    │
+    #    └── SSH-Key aus terraform.tfvars
     user_account {
           username = "ansible"
           keys     = [trimspace(var.ssh_public_key)]
