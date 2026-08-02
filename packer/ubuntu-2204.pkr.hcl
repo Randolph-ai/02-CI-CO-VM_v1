@@ -6,7 +6,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-07-29
+# Letzte Änderung: 2026-08-01
 # ============================================================
 # ========================
 # required_plugins
@@ -289,7 +289,7 @@ build {
       "sudo apt-get install -y unattended-upgrades",
       "printf '%s\\n' '#clear Unattended-Upgrade::Allowed-Origins;' 'Unattended-Upgrade::Allowed-Origins {' '    \"Ubuntu:jammy-security\";' '};' | sudo tee /etc/apt/apt.conf.d/51security-only > /dev/null",
       "sudo dpkg-reconfigure -f noninteractive unattended-upgrades",
-      "systemctl is-enabled unattended-upgrades",
+      "sudo systemctl is-enabled unattended-upgrades",
         
       #=====================
       # NEU: 29.07.26 CIS-Härtung: Unnötige Dienste deaktivieren

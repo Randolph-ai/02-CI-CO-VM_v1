@@ -24,3 +24,6 @@ __pycache__/
 # Python (lokale venvs, falls für Checkov-Checks genutzt)
 venv/
 .venv/
+
+# Dateien
+pipeline-explained
