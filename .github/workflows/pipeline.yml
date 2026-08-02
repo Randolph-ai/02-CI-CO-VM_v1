@@ -1,172 +1,244 @@
-# ============================================================
-# CI/CD PIPELINE - PROXMOX
-# Eine VM: Web-Server mit Nginx
-# ============================================================
-# Autor:       Randolph Bluming
-# Erstellt am:    2026-06-27
-# Letzte Änderung:2026-07-22
-# Projekt:     CI-CO Setup - Proxmox Infrastructure
-# Zweck:       Vollautomatische Installation von Ubuntu 22.04
-#              Wird von Packer während des Template-Builds verwendet
-# ============================================================
+# ===================================================================
+# PROXMOX CI/CD PIPELINE - Infrastruktur-Automatisierung
+# ===================================================================
+# 📌 WAS PASSIERT HIER?
+#   Diese Pipeline automatisiert den gesamten Infrastruktur-Lebenszyklus:
+#   1️ Packer baut ein Ubuntu-22.04-Template in Proxmox
+#   2️ Checkov prüft Terraform-Code (HARTES GATE - bricht bei Fehlern ab)
+#   3️ Terraform deployed VM aus dem Template
+#   4️ Checkov scannt Ansible (Beobachtungsmodus - kein Abbruch)
+#   5️ Ansible konfiguriert Nginx-Webserver auf der VM
+#
+#  Erstellt am:       2026-06-27
+#  Letzte Änderung am:2026-08-02 
+#  Autor:          Randolph Bluming
+#  Repository:     GitHub Actions (self-hosted Runner)
+#  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
+# ===================================================================
 
+# ===================================================================
+# PIPELINE-KONFIGURATION
+# ===================================================================
 name: Proxmox CI/CD Pipeline
 
-# ---- TRIGGER ----
-# Pipeline startet automatisch bei:
+# ===================================================================
+# TRIGGER-BEDINGUNGEN
+# ===================================================================
+# Die Pipeline startet automatisch bei bestimmten Ereignissen
+# ===================================================================
 on:
+  # Bei Push auf den main-Branch
   push:
     branches: [main]
+    # Nur wenn sich Dateien in diesen Verzeichnissen geändert haben
     paths:
-      - 'packer/**'
-      - 'terraform/**'
-      - 'ansible/**'
-      - '.github/workflows/pipeline.yml'
+      - 'packer/**'          # Packer-Konfiguration für VM-Template
+      - 'terraform/**'       # Terraform-Code für VM-Deployment
+      - 'ansible/**'         # Ansible-Playbooks für Konfiguration
+      - '.github/workflows/pipeline.yml'  # Diese Pipeline-Datei selbst
+  
+  # Bei Pull-Requests auf den main-Branch
   pull_request:
     branches: [main]
+    # Gleiche Pfad-Filter wie beim Push
     paths:
       - 'packer/**'
       - 'terraform/**'
       - 'ansible/**'
       - '.github/workflows/pipeline.yml'
 
-# ---- SICHERHEIT ----
-# Nur Lesezugriff auf das Repository
+# ===================================================================
+# SICHERHEITSBERECHTIGUNGEN
+# ===================================================================
+# Minimale Rechte für die Pipeline (Prinzip der geringsten Privilegien)
+# ===================================================================
 permissions:
-  contents: read
+  contents: read  # Nur Lesezugriff auf Repository-Inhalte
 
+# ===================================================================
+# PIPELINE-JOBS
+# ===================================================================
 jobs:
-  # ============================================================
-  # JOB 1: VM-Template mit Packer bauen
+
+  # =================================================================
+  # JOB 1: VM-TEMPLATE MIT PACKER BAUEN
+  # =================================================================
+  # Ziel: Erstellt ein fertiges Ubuntu-22.04-Template in Proxmox
+  # Dauer: ca. 10-15 Minuten
   # Ergebnis: Template "ubuntu-2204-template" liegt in Proxmox
-  # ============================================================
+  # =================================================================
   build-template:
-    # Läuft auf deiner Ubuntu-VM in Proxmox
-    # Nicht auf GitHub-Servern → kann Proxmox erreichen
+    # Läuft auf einem selbst-gehosteten Runner in deinem Proxmox-Netzwerk
+    # Dadurch kann der Runner direkt auf Proxmox zugreifen
     runs-on: [self-hosted, proxmox]
 
     steps:
-
-      # Lädt deinen Code vom GitHub-Repo auf den Runner
+      # ---------------------------------------------------------------
+      # Schritt 1: Code vom Repository herunterladen
+      # ---------------------------------------------------------------
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
-            clean: false
+          clean: false  # Verhindert Löschen des Workspace-Caches
 
-      # Kontrolliert ob Packer korrekt installiert ist
+      # ---------------------------------------------------------------
+      # Schritt 2: Packer-Installation prüfen
+      # ---------------------------------------------------------------
       - name: Packer Version prüfen
-        run: packer version
+        run: packer version  # Gibt die installierte Packer-Version aus
 
+      # ---------------------------------------------------------------
+      # Schritt 3: Packer-Plugins installieren
+      # ---------------------------------------------------------------
       # Lädt das Proxmox-Plugin für Packer herunter
-      # Steht in deiner ubuntu-2204.pkr.hcl unter required_plugins
+      # Die Plugins sind in ubuntu-2204.pkr.hcl unter required_plugins definiert
       - name: Packer Plugins installieren
         run: |
-          cd packer
-          packer init .
+          cd packer               # In das Packer-Verzeichnis wechseln
+          packer init .          # Plugins basierend auf .pkr.hcl installieren
 
-      # Prüft die pkr.hcl Datei auf Syntaxfehler
-      # Noch kein Build — nur Überprüfung
+      # ---------------------------------------------------------------
+      # Schritt 4: Packer-Template validieren
+      # ---------------------------------------------------------------
+      # Prüft die Syntax und Konfiguration ohne zu bauen
+      # Fängt Fehler frühzeitig ab
       - name: Packer Template validieren
         run: |
           cd packer
-          packer validate .
+          packer validate .      # Validiert alle .pkr.hcl Dateien
         env:
-          # Packer nutzt Passwort-Authentifizierung
-          # In Packer werden sie so gelesen: "${env("PROXMOX_PASSWORD")}"
+          # Umgebungsvariablen für die Proxmox-Authentifizierung
+          # Packer liest diese mit ${env("PROXMOX_PASSWORD")}
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
           PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
           PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
 
+      # ---------------------------------------------------------------
+      # Schritt 5: Alte Template-VM entfernen
+      # ---------------------------------------------------------------
+      # Löscht eine eventuell vorhandene alte Template-VM mit ID 2000
+      # Verhindert Konflikte beim Erstellen des neuen Templates
       - name: Alte Template-VM entfernen (falls vorhanden)
         run: |
+          # SSH zu Proxmox-Host und VM löschen (|| true = Fehler ignorieren falls VM nicht existiert)
           ssh -o StrictHostKeyChecking=no root@10.0.30.22 \
             "qm destroy 2000 || true"     
             
-      # Jetzt wird das Template wirklich gebaut
-      # Packer installiert Ubuntu, konfiguriert es, erstellt Template
-      # Dauert ca. 10-15 Minuten
-      
+      # ---------------------------------------------------------------
+      # Schritt 6: Packer-Template bauen
+      # ---------------------------------------------------------------
+      # Jetzt wird das Template wirklich erstellt
+      # Packer: 
+      #   - Startet eine VM aus dem Ubuntu-ISO
+      #   - Führt die Provisioner (Shell-Skripte) aus
+      #   - Konvertiert die VM in ein Template
       - name: Packer Template bauen
         run: |
           cd packer
-          packer build .
+          packer build .          # Baut das Template laut .pkr.hcl
         env:
+          # Authentifizierung für Proxmox während des Builds
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
           PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
           PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
 
-# ============================================================
-  # JOB 2: ***** Security-Gate mit Checkov (Phase 2A) ********
-  # Wartet bis Job 1 fertig ist
-  # Prüft terraform/ gegen unsere Custom-Checks (CKV_PROXMOX_1/2),
-  # BEVOR irgendeine VM deployed wird. Hartes Gate: schlägt der
-  # Scan fehl, läuft deploy-vm gar nicht erst an (kein Soft-Fail).
-  # ============================================================
+
+  # =================================================================
+  # JOB 2: SECURITY-GATE MIT CHECKOV
+  # =================================================================
+  # Ziel: Sicherheitsscan des Terraform-Codes BEVOR deployt wird
+  # Wartet auf: build-template
+  # Verhalten: HARTES GATE - bricht Pipeline bei Fehlern ab
+  # =================================================================
   security-scan:
-    needs: build-template
+    needs: build-template  # Startet erst wenn Job 1 erfolgreich war
     runs-on: [self-hosted, proxmox]
 
     steps:
-
+      # ---------------------------------------------------------------
+      # Schritt 1: Code vom Repository herunterladen
+      # ---------------------------------------------------------------
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
           clean: false
 
+      # ---------------------------------------------------------------
+      # Schritt 2: Checkov-Installation prüfen
+      # ---------------------------------------------------------------
       - name: Checkov Version prüfen
         run: checkov --version
 
-      # Kein "|| true", kein continue-on-error: Checkov gibt bei
-      # mindestens einem FAILED Check automatisch Exit-Code 1 zurück,
-      # was diesen Step und damit den ganzen Job fehlschlagen lässt.
-      # Genau das ist das gewünschte harte Gate.
+      # ---------------------------------------------------------------
+      # Schritt 3: Checkov Security-Scan durchführen
+      # ---------------------------------------------------------------
+      # Scannt den Terraform-Code mit eigenen Custom-Checks
+      # WICHTIG: Kein "|| true" oder "continue-on-error"
+      # → Bei FAILED-Checks bricht der Job mit Exit-Code 1 ab
+      # → Verhindert dass unsichere Infrastruktur deployt wird
       - name: Checkov Security-Gate (Custom Proxmox-Checks)
         run: |
+          # -d terraform                    → Verzeichnis für Scan
+          # --external-checks-dir ...       → Eigene Custom-Checks einbinden
+          # --compact                      → Kompakte Ausgabe
           checkov -d terraform --external-checks-dir terraform/checks --compact
 
-  # ============================================================
-  # JOB 3: VM mit Terraform deployen
-  # Wartet bis Job 1 UND security-scan fertig ist
+
+  # =================================================================
+  # JOB 3: VM MIT TERRAFORM DEPLOYEN
+  # =================================================================
+  # Ziel: Erstellt eine VM aus dem zuvor gebauten Template
+  # Wartet auf: build-template UND security-scan (beide erfolgreich)
   # Ergebnis: VM läuft in Proxmox mit einer IP-Adresse
-  # ============================================================
+  # =================================================================
   deploy-vm:
-    # Startet erst wenn Job 1 erfolgreich war
-    needs: [build-template, security-scan]
+    needs: [build-template, security-scan]  # Wartet auf beide Jobs
     runs-on: [self-hosted, proxmox]
 
-    # Diese IP wird an Job 3 weitergegeben
-    # steps.get-ip.outputs.vm_ip → kommt vom Step weiter unten
+    # =============================================================
+    # OUTPUTS: IP-Adressen für nachfolgende Jobs
+    # =============================================================
+    # Die IPs werden aus Terraform ausgelesen und an Job 3 und 4 weitergegeben
     outputs:
-      vm_ip: ${{ steps.get-ip.outputs.vm_ip }}
+      vm_ip: ${{ steps.get-ip.outputs.vm_ip }}          # Web-Server IP
+      db_vm_ip: ${{ steps.get-ip.outputs.db_vm_ip }}    # DB-Server IP
 
     steps:
-
+      # ---------------------------------------------------------------
+      # Schritt 1: Code vom Repository herunterladen
+      # ---------------------------------------------------------------
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
           clean: false
 
-      # Kontrolliert ob Terraform korrekt installiert ist
+      # ---------------------------------------------------------------
+      # Schritt 2: Terraform-Installation prüfen
+      # ---------------------------------------------------------------
       - name: Terraform Version prüfen
         run: terraform version
 
-      # Lädt den Proxmox-Provider herunter
-      # Liest provider.tf und lädt benötigte Plugins
-      # GEÄNDERT: TF_VAR_* statt PROXMOX_*
-      # Terraform liest nur Variablen die mit TF_VAR_ beginnen
-      # TF_VAR_pm_api_url → wird zu var.pm_api_url in Terraform
+      # ---------------------------------------------------------------
+      # Schritt 3: Terraform initialisieren
+      # ---------------------------------------------------------------
+      # Lädt den Proxmox-Provider und andere benötigte Plugins herunter
+      # Wichtig: TF_VAR_* Umgebungsvariablen werden zu Terraform-Variablen
       - name: Terraform initialisieren
         run: |
           cd terraform
           terraform init
         env:
+          # TF_VAR_pm_api_url → var.pm_api_url in Terraform
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
-      # Zeigt was Terraform tun WILL — noch keine Änderung
-      # Gut zum Verstehen und Kontrollieren
+      # ---------------------------------------------------------------
+      # Schritt 4: Terraform Plan anzeigen
+      # ---------------------------------------------------------------
+      # Zeigt was Terraform tun WILL (ohne Änderungen durchzuführen)
+      # Gut zum Verständnis und zur Kontrolle der Änderungen
       - name: Terraform Plan anzeigen
         run: |
           cd terraform
@@ -177,8 +249,11 @@ jobs:
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
-      # Jetzt wird die VM wirklich erstellt
-      # -auto-approve = keine manuelle Bestätigung nötig
+      # ---------------------------------------------------------------
+      # Schritt 5: VM deployen
+      # ---------------------------------------------------------------
+      # Führt die eigentliche Erstellung der VM durch
+      # -auto-approve: Keine manuelle Bestätigung notwendig (automatisiert)
       - name: VM deployen
         run: |
           cd terraform
@@ -189,109 +264,146 @@ jobs:
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
-      # Liest die IP-Adresse aus Terraform aus
-      # und speichert sie damit Job 3 sie verwenden kann
-      # vm_ip kommt aus deiner outputs.tf
+      # ---------------------------------------------------------------
+      # Schritt 6: VM IP-Adressen auslesen
+      # ---------------------------------------------------------------
+      # Liest die IP-Adressen aus Terraform-Outputs
+      # Speichert sie für die nachfolgenden Jobs (Ansible)
       - name: VM IP-Adresse auslesen
-        id: get-ip                    # ← diese ID wird oben bei outputs referenziert
+        id: get-ip                    # Wichtig: Diese ID wird in "outputs" referenziert
         run: |
           cd terraform
 
+          # IP-Adressen aus Terraform-Outputs lesen
+          # 2>/dev/null unterdrückt Fehlermeldungen falls Output nicht existiert
           VM_IP=$(terraform output -raw vm_ip 2>/dev/null)
+          DB_VM_IP=$(terraform output -raw db_server_ip 2>/dev/null)
 
-          # Sicherheitscheck: Wenn keine IP → Pipeline abbrechen
-          # Besser Fehler sehen als mit falscher IP weitermachen
-          if [ -z "$VM_IP" ]; then
-            echo "❌ FEHLER: vm_ip Output fehlt!"
+          # ============================================================
+          # SICHERHEITSCHECK: Prüfung ob IPs vorhanden sind
+          # ============================================================
+          # Falls keine IP gefunden wurde → Pipeline abbrechen
+          # Verhindert dass mit falschen/leeren IPs weitergearbeitet wird
+          if [ -z "$VM_IP" ] || [ -z "$DB_VM_IP" ]; then
+            echo "❌ FEHLER: Eine oder beide IPs fehlen!"
+            echo "  vm_ip: '$VM_IP'"
+            echo "  db_server_ip: '$DB_VM_IP'"
             echo "Prüfe ob outputs.tf korrekt konfiguriert ist."
             exit 1
           fi
 
           echo "✅ VM IP gefunden: $VM_IP"
+          echo "✅ DB-Server IP gefunden: $DB_VM_IP"
 
-          # IP wird gespeichert und an Job 3 weitergegeben
+          # IPs in GitHub-Actions-Output schreiben
+          # Dadurch werden sie an nachfolgende Jobs weitergegeben
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "db_vm_ip=$DB_VM_IP" >> $GITHUB_OUTPUT
 
 
-# ============================================================
-  # JOB: Ansible Security-Scan (Beobachtungsmodus, Checkov)
-  # Wartet bis Job 3 (deploy-vm) fertig ist
-  # Scannt ansible/ inkl. eigener Custom-Checks (CKV_ANSIBLE_CUSTOM_1)
-  # BEWUSST Soft-Fail: Findings werden angezeigt, aber configure-vm
-  # läuft trotzdem an. Kein Gate wie bei Terraform - erst beobachten.
-  # ============================================================
+  # =================================================================
+  # JOB 4: ANSIBLE SECURITY-SCAN (BEOBACHTUNGSMODUS)
+  # =================================================================
+  # Ziel: Ansible-Playbooks auf Sicherheitsprobleme prüfen
+  # Wartet auf: deploy-vm
+  # Verhalten: SOFT-FAIL - zeigt Findings, bricht aber NICHT ab
+  # =================================================================
   ansible-security-scan:
-    needs: deploy-vm
+    needs: deploy-vm  # Wartet bis die VM deployed ist
     runs-on: [self-hosted, proxmox]
 
     steps:
-
+      # ---------------------------------------------------------------
+      # Schritt 1: Code vom Repository herunterladen
+      # ---------------------------------------------------------------
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
           clean: false
 
+      # ---------------------------------------------------------------
+      # Schritt 2: Checkov-Installation prüfen
+      # ---------------------------------------------------------------
       - name: Checkov Version prüfen
         run: checkov --version
 
-      # continue-on-error: true → dieser Step (und damit der ganze Job)
-      # wird als "erfolgreich" gewertet, selbst wenn Checkov FAILED
-      # zurückgibt. configure-vm wartet zwar auf diesen Job, startet
-      # aber trotzdem, egal was der Scan findet - reines Beobachten.
+      # ---------------------------------------------------------------
+      # Schritt 3: Ansible-Scan durchführen (Beobachtungsmodus)
+      # ---------------------------------------------------------------
+      # continue-on-error: true → Job gilt als erfolgreich, auch wenn Checkov fehlschlägt
+      # Dadurch wird der nachfolgende configure-vm Job NICHT blockiert
+      # Ermöglicht Beobachtung ohne Deployment-Block
       - name: Checkov Ansible-Scan (Beobachtungsmodus)
         continue-on-error: true
         run: |
+          # -d ansible                       → Verzeichnis für Scan
+          # --framework ansible             → Nur Ansible scannen
+          # --external-checks-dir ...       → Eigene Custom-Checks einbinden
+          # --compact                       → Kompakte Ausgabe
           checkov -d ansible --framework ansible --external-checks-dir ansible/checks --compact
 
   
-  # ============================================================
-  # JOB 4: VM mit Ansible konfigurieren
-  # Wartet bis Job 3 (deploy-vm) fertig ist
-  # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar ü
-  # ============================================================
+  # =================================================================
+  # JOB 5: VM MIT ANSIBLE KONFIGURIEREN
+  # =================================================================
+  # Ziel: Software auf der VM installieren und konfigurieren
+  # Wartet auf: deploy-vm UND ansible-security-scan (Soft-Fail möglich)
+  # Ergebnis: Nginx läuft auf der VM → Webseite erreichbar
+  # =================================================================
   configure-vm:
-    # Startet erst wenn deploy-vm UND ansible-security-scan fertig sind
-    # (ansible-security-scan ist Soft-Fail, blockiert configure-vm aber
-    # trotzdem nie wirklich - continue-on-error sorgt dafür)
+    # Wartet auf beide Jobs (auch wenn security-scan Soft-Fail hatte)
     needs: [deploy-vm, ansible-security-scan]
     runs-on: [self-hosted, proxmox]
 
     steps:
-
+      # ---------------------------------------------------------------
+      # Schritt 1: Code vom Repository herunterladen
+      # ---------------------------------------------------------------
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
           clean: false
 
-      # Kontrolliert ob Ansible korrekt installiert ist
+      # ---------------------------------------------------------------
+      # Schritt 2: Ansible-Installation prüfen
+      # ---------------------------------------------------------------
       - name: Ansible Version prüfen
         run: ansible --version
 
+      # ---------------------------------------------------------------
+      # Schritt 3: SSH-Key für Ansible einrichten
+      # ---------------------------------------------------------------
       # Schreibt den privaten SSH-Key aus GitHub Secrets in eine Datei
-      # Eigener, klar benannter Pfad (NICHT id_ed25519!) — das ist der
-      # dauerhafte Packer-Key und darf von Job 3 nicht überschrieben/gelöscht werden
+      # Wichtig: Eigener Dateiname (nicht id_ed25519) um Konflikte zu vermeiden
       - name: SSH-Key einrichten
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/gh_actions_deploy_key
-          chmod 600 ~/.ssh/gh_actions_deploy_key
+          mkdir -p ~/.ssh                      # .ssh-Verzeichnis erstellen
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/gh_actions_deploy_key  # Key speichern
+          chmod 600 ~/.ssh/gh_actions_deploy_key  # Nur Leserechte für aktuellen User
 
-      
-      # Sicherheitscheck: Wenn nach 30 Versuchen keine Verbindung möglich → Pipeline abbrechen
-      # Besser Fehler sehen als mit falscher IP weitermachen
+      # ---------------------------------------------------------------
+      # Schritt 4: Warten bis VMs erreichbar sind
+      # ---------------------------------------------------------------
+      # Prüft ob SSH auf den VMs verfügbar ist (max. 30 Versuche)
+      # Verhindert dass Ansible auf noch nicht fertige VMs zugreift
       - name: Warten bis VM erreichbar ist
         env:
-          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }} #  <- IP kommt von Job 3 (deploy-vm)
+          VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}          # Web-Server IP
+          DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}    # DB-Server IP
         run: |
-          echo "Warte auf VM: $VM_IP"
+          # ============================================================
+          # WEB-SERVER ERREICHBARKEIT PRÜFEN
+          # ============================================================
+          echo "Warte auf Web-Server: $VM_IP"
 
           SSH_OK=false
-          for i in {1..30}; do
+          for i in {1..30}; do  # Maximal 30 Versuche
+            # SSH-Verbindung testen mit 'echo ok'
             if ssh -o StrictHostKeyChecking=no \
                    -o ConnectTimeout=5 \
                    -i ~/.ssh/gh_actions_deploy_key \
                    ansible@$VM_IP 'echo ok' 2>/dev/null; then
-              echo "✅ VM ist erreichbar!"
+              echo "✅ Web-Server ist erreichbar!"
               SSH_OK=true
               break
             fi
@@ -299,47 +411,94 @@ jobs:
             sleep 10
           done
 
+          # Falls nach 30 Versuchen keine Verbindung → Pipeline abbrechen
           if [ "$SSH_OK" = false ]; then
-            echo "❌ FEHLER: VM nach 30 Versuchen nicht erreichbar!"
+            echo "❌ FEHLER: Web-Server nach 30 Versuchen nicht erreichbar!"
             exit 1
           fi
 
-          
-      # Speichert den SSH-Fingerabdruck der VM
-      # Verhindert die interaktive "Are you sure?" Frage
+          # ============================================================
+          # DB-SERVER ERREICHBARKEIT PRÜFEN
+          # ============================================================
+          echo "Warte auf DB-Server: $DB_VM_IP"
+
+          DB_SSH_OK=false
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=5 \
+                   -i ~/.ssh/gh_actions_deploy_key \
+                   ansible@$DB_VM_IP 'echo ok' 2>/dev/null; then
+              echo "✅ DB-Server ist erreichbar!"
+              DB_SSH_OK=true
+              break
+            fi
+            echo "Versuch $i/30 - warte 10 Sekunden..."
+            sleep 10
+          done
+
+          if [ "$DB_SSH_OK" = false ]; then
+            echo "❌ FEHLER: DB-Server nach 30 Versuchen nicht erreichbar!"
+            exit 1
+          fi
+
+      # ---------------------------------------------------------------
+      # Schritt 5: SSH-Fingerabdruck speichern
+      # ---------------------------------------------------------------
+      # Speichert den Host-Key der VM in known_hosts
+      # Verhindert die interaktive "Are you sure?" Frage bei SSH
       - name: SSH Fingerabdruck speichern
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
+          DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}
         run: |
-          ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts      # Web-Server
+          ssh-keyscan -H "$DB_VM_IP" >> ~/.ssh/known_hosts   # DB-Server
 
-      # Führt das Ansible Playbook aus
-      # Ansible verbindet sich per SSH zur VM und installiert Nginx
+      # ---------------------------------------------------------------
+      # Schritt 6: Ansible Playbook ausführen
+      # ---------------------------------------------------------------
+      # Führt das Ansible-Playbook aus, das die VMs konfiguriert
+      # Installiert Nginx, konfiguriert Services etc.
       - name: Ansible Playbook ausführen
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
-          ANSIBLE_HOST_KEY_CHECKING: "False"
+          DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}
+          ANSIBLE_HOST_KEY_CHECKING: "False"  # Deaktiviert Host-Key-Checking (wird von ssh-keyscan übernommen)
         run: |
           cd ansible
 
-          # Inventory dynamisch erstellen mit der aktuellen VM-IP
+          # ============================================================
+          # DYNAMISCHES INVENTORY ERSTELLEN
+          # ============================================================
+          # Erstellt eine inventory.ini mit den aktuellen IP-Adressen
           # Wird bei jedem Pipeline-Run neu geschrieben
           cat > inventory.ini << EOF
           [webserver]
           $VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
 
+          [dbserver]
+          $DB_VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
           EOF
 
-          # Playbook ausführen
+          # ============================================================
+          # PLAYBOOK AUSFÜHREN
+          # ============================================================
+          # -i inventory.ini                 → Verwendet das erstellte Inventory
+          # --user ansible                  → SSH-User für Verbindung
+          # --private-key ...              → Pfad zum privaten SSH-Key
           ansible-playbook -i inventory.ini playbook.yml \
             --user ansible \
-            --private-key ~/.ssh/gh_actions_deploy_key \
-            --extra-vars "vm_host=$VM_IP"
+            --private-key ~/.ssh/gh_actions_deploy_key
 
-      # Sicherheit: Privater Key wird IMMER gelöscht
-      # if: always() → läuft auch wenn vorherige Steps fehlschlagen
+      # ---------------------------------------------------------------
+      # Schritt 7: SSH-Key aufräumen
+      # ---------------------------------------------------------------
+      # Löscht den privaten SSH-Key nach der Pipeline
+      # if: always() → Läuft IMMER, auch wenn vorherige Steps fehlschlagen
+      # Wichtig für die Sicherheit: Key wird nicht auf dem Runner belassen
       - name: SSH-Key aufräumen
         if: always()
         run: rm -f ~/.ssh/gh_actions_deploy_key

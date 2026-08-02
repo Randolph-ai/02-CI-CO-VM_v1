@@ -33,17 +33,17 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   name        = "web-server-prod"
   description = "Web-Server (Nginx) - Managed by Terraform"
   tags        = ["web", "prod"]
-  
+
   # ---- PROXMOX NODE ----
   # Auf welchem Proxmox-Host wird die VM erstellt?
-  node_name   = var.target_node
+  node_name = var.target_node
   #    │
   #    └── Wert aus terraform.tfvars
   #        z.B. target_node = "proxmox-host-01"
 
   # ---- VM-ID ----
   # Eindeutige ID in Proxmox (muss im Cluster einzigartig sein)
-  vm_id       = var.web_server_vm_id
+  vm_id = var.web_server_vm_id
   #    │
   #    └── Wert aus terraform.tfvars
   #        z.B. web_server_vm_id = 101
@@ -160,9 +160,218 @@ resource "proxmox_virtual_environment_vm" "web_server" {
     #    │
     #    └── SSH-Key aus terraform.tfvars
     user_account {
-          username = "ansible"
-          keys     = [trimspace(var.ssh_public_key)]
-        }
+      username = "ansible"
+      keys     = [trimspace(var.ssh_public_key)]
+    }
 
+  }
+}
+
+# ============================================================
+# RESOURCE: proxmox_virtual_environment_vm.db_server
+# ============================================================
+# ZWECK:   Definiert eine Proxmox-VM für den Datenbank-Server (PostgreSQL)
+#          Die VM wird aus einem Template geklont und per Cloud-Init initialisiert.
+#          Alle Hardware-Parameter (CPU, RAM, Festplatte) sowie Netzwerk und
+#          Benutzerzugang werden über Terraform-Variablen gesteuert.
+#
+# WICHTIG: - Das Template (var.template_vm_id) MUSS vor dem ersten `apply` existieren.
+#          - Die VM-ID (var.db_server_vm_id) muss im gesamten Proxmox-Cluster
+#            eindeutig sein – andernfalls schlägt das Erstellen fehl.
+#          - Der QEMU-Guest-Agent ist zwingend aktiviert, damit Terraform
+#            die IP-Adresse auslesen kann.
+#          - Die IP-Adresse (var.db_server_ip) wird statisch vergeben und
+#            muss zum definierten Subnetz passen.
+# ============================================================
+
+
+resource "proxmox_virtual_environment_vm" "db_server" {
+  # ==========================================
+  #  GRUNDEINSTELLUNGEN
+  # ==========================================
+  # Name, Beschreibung und Tags für die VM
+  #    │
+  #    └── name        = Hostname in Proxmox (muss eindeutig sein)
+  #        description = Kurzbeschreibung für Admins
+  #        tags        = Liste zur Kategorisierung (z.B. für Filter)
+
+  name        = "db-server-prod"
+  description = "DB-Server (PostgreSQL) - Managed by Terraform"
+  tags        = ["db", "prod"]
+
+  # ==========================================
+  #  PROXMOX NODE
+  # ==========================================
+  # Auf welchem Proxmox-Node die VM laufen soll
+  #    │
+  #    └── node_name = Variable (z.B. "proxmox1")
+  #        → Kann je nach Umgebung (prod/staging) unterschiedlich sein
+
+  node_name = var.target_node
+
+  # ==========================================
+  #  VM-ID
+  # ==========================================
+  # Eindeutige ID im gesamten Proxmox-Cluster
+  #    │
+  #    └── vm_id = Zahl (z.B. 101)
+  #        → Wird als Variable übergeben, um Kollisionen zu vermeiden
+
+  vm_id = var.db_server_vm_id
+
+  # ==========================================
+  #  QEMU GUEST AGENT
+  # ==========================================
+  # Aktiviert den QEMU-Gast-Agent (PFICHT für IP-Abfrage und ordentliches Herunterfahren)
+  #    │
+  #    └── enabled = true
+  #        → Ermöglicht Terraform, die IP-Adresse der VM auszulesen
+  #        → Verbessert das Shutdown-Verhalten
+
+  agent {
+    enabled = true
+  }
+
+  # ==========================================
+  #  TIMEOUT CLONE
+  # ==========================================
+  # Maximale Wartezeit beim Klonen der Vorlage (in Sekunden)
+  #    │
+  #    └── timeout_clone = 600 (10 Minuten)
+  #        → Bei großen Vorlagen oder langsamen Storage nötig
+  #        → Verhindert Timeout-Fehler bei Terraform
+
+  timeout_clone = 600
+
+  # ==========================================
+  #  TEMPLATE KLONEN
+  # ==========================================
+  # Welche Vorlage (Template) als Basis verwendet wird
+  #    │
+  #    └── clone { vm_id = var.template_vm_id }
+  #        → Die Quell-VM muss ein Template sein (oder eine VM)
+  #        → Terraform erstellt einen vollständigen Klon (full clone)
+  #        → Die VM-ID des Templates wird als Variable übergeben
+
+  clone {
+    vm_id = var.template_vm_id
+  }
+
+  # ==========================================
+  #  CPU
+  # ==========================================
+  # CPU-Konfiguration
+  #    │
+  #    └── cores = Anzahl der CPU-Kerne (aus Variable)
+  #        type  = "host" (beste Performance, gibt Host-CPU an Gast weiter)
+  #        → "host" ist empfehlenswert für maximale Kompatibilität
+  #        → Kann bei Migration zu Problemen führen (dann "kvm64" verwenden)
+
+  cpu {
+    cores = var.db_server_cores
+    type  = "host"
+  }
+
+  # ==========================================
+  #  RAM
+  # ==========================================
+  # Arbeitsspeicher-Konfiguration
+  #    │
+  #    └── dedicated = Größe in MB (aus Variable)
+  #        → Hier wird ausschließlich dedizierter RAM vergeben (kein Ballooning)
+  #        → Für Datenbanken ist dedizierter RAM oft stabiler
+
+  memory {
+    dedicated = var.db_server_memory
+  }
+
+  # ==========================================
+  #  NETZWERK
+  # ==========================================
+  # Netzwerk-Adapter der VM
+  #    │
+  #    └── bridge  = Virtueller Switch (aus Variable)
+  #        vlan_id = VLAN-Tag (aus Variable)
+  #        → Gleiche Bridge/VLAN wie web-server – geteilte Variable, bewusst keine
+  #          eigene db_server-Variante, da die Netzwerk-Zuordnung projektweit
+  #          (nicht VM-spezifisch) definiert ist.
+  #        → So wird sichergestellt, dass alle VMs im selben Subnetz kommunizieren
+  #          können, ohne dass jede VM eigene Netzwerkvariablen erhält.
+
+  network_device {
+    bridge  = var.network_bridge
+    vlan_id = var.network_vlan_id
+  }
+
+  # ==========================================
+  #  FESTPLATTE
+  # ==========================================
+  # Festplattenkonfiguration
+  #    │
+  #    └── datastore_id = Speicher-Pool (z.B. "local-lvm") – aus Variable
+  #        interface    = SCSI-Controller und Laufwerksnummer (scsi0)
+  #        size         = Plattenplatz in GB (aus Variable)
+  #        → Die Festplatte wird als SCSI-Gerät angelegt (beste Performance)
+  #        → Die Größe ist für den DB-Server separat definiert, weil DBs oft
+  #          mehr Speicher benötigen als Webserver
+
+  disk {
+    datastore_id = var.disk_datastore
+    interface    = "scsi0"
+    size         = var.db_server_disk_size
+  }
+
+  # ==========================================
+  #  CLOUD-INIT
+  # ==========================================
+  # Initialisierung der VM bei der ersten Inbetriebnahme
+  #    │
+  #    └── DNS-Server, IP-Konfiguration, Benutzerkonto
+  #        → Cloud-Init wird bei Proxmox über eine separate CD-ROM bereitgestellt
+  #        → Terraform generiert die Konfiguration automatisch
+
+  initialization {
+
+    # ---- DNS ----
+    # DNS-Server für die VM (statisch gesetzt, da keine DHCP-Übergabe)
+    #    │
+    #    └── servers = ["8.8.8.8", "1.1.1.1"] (Google DNS)
+    #        → Kann durch unternehmenseigene DNS-Server ersetzt werden
+
+    dns {
+      servers = ["8.8.8.8", "1.1.1.1"]
+    }
+
+    # ---- IP-KONFIGURATION ----
+    # Statische IPv4-Konfiguration für die VM
+    #    │
+    #    └── address = var.db_server_ip (z.B. "10.0.30.10/24")
+    #        gateway = var.network_gateway (z.B. "10.0.30.1")
+    #        → Die IP wird als Variable übergeben, damit sie pro Umgebung
+    #          angepasst werden kann (z.B. .10 für DB, .11 für Web)
+
+    ip_config {
+      ipv4 {
+        address = var.db_server_ip
+        gateway = var.network_gateway
       }
     }
+
+    # ---- BENUTZERKONTO ----
+    # Anlegen eines Benutzers für den SSH-Zugriff
+    #    │
+    #    └── username = "ansible" (gleicher User wie web-server)
+    #        keys     = [trimspace(var.ssh_public_key)] (öffentlicher SSH-Key)
+    #        → Der gleiche User/Key wird vorerst für alle VMs verwendet
+    #        → In Phase 5 (Vault) wird das pro VM differenziert,
+    #          aktuell bewusst identisch gehalten, um die Komplexität
+    #          während der Entwicklung zu reduzieren.
+
+    user_account {
+      username = "ansible"
+      keys     = [trimspace(var.ssh_public_key)]
+    }
+
+  } # Ende initialization
+
+} # Ende resource

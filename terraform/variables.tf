@@ -44,7 +44,7 @@ variable "pm_api_token_id" {
 variable "pm_api_token_secret" {
   description = "Proxmox API Token Secret"
   type        = string
-  sensitive   = true  # ← Wird in Logs NICHT angezeigt!
+  sensitive   = true # ← Wird in Logs NICHT angezeigt!
 }
 
 # ============================================================
@@ -54,7 +54,7 @@ variable "pm_api_token_secret" {
 variable "target_node" {
   description = "Name des Proxmox Nodes"
   type        = string
-  default     = "proxmox"  # ← Hat einen Default → optional in tfvars
+  default     = "proxmox" # ← Hat einen Default → optional in tfvars
 }
 
 variable "template_vm_id" {
@@ -128,4 +128,38 @@ variable "web_server_ip" {
   description = "Statische IP-Adresse des Web-Servers"
   type        = string
   default     = "10.0.30.101/24"
+}
+
+# ============================================================
+# 5. DB-SERVER VM
+# ============================================================
+
+variable "db_server_vm_id" {
+  description = "Eindeutige VM-ID in Proxmox"
+  type        = number
+  default     = 1010
+}
+
+variable "db_server_cores" {
+  description = "Anzahl CPU-Cores"
+  type        = number
+  default     = 2
+}
+
+variable "db_server_memory" {
+  description = "RAM in MB"
+  type        = number
+  default     = 2048
+}
+
+variable "db_server_disk_size" {
+  description = "Disk in GB - MUSS mit Packer übereinstimmen!"
+  type        = number
+  default     = 40
+}
+
+variable "db_server_ip" {
+  description = "Statische IP-Adresse des DB-Servers"
+  type        = string
+  default     = "10.0.30.102/24"
 }

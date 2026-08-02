@@ -281,3 +281,225 @@
           Status: {{ nginx_check.status }}
           Host:   {{ ansible_hostname }}
           IP:     {{ ansible_default_ipv4.address }}
+
+
+# ============================================================
+# PLAY 2: DB-SERVER KONFIGURATION
+# ============================================================
+# Eigenständiger Play, komplett unabhängig vom Web-Server-Play oben.
+# Betrifft NUR die Gruppe "dbserver" aus inventory.ini - der
+# Web-Server-Play oben betrifft NUR "webserver". Keine Überschneidung.
+# ============================================================
+- name: Basis-Setup DB-Server
+  hosts: dbserver        # ← Gruppe aus inventory.ini
+  become: true
+
+  tasks:
+
+    # ==========================================================
+    # TASK 1: PAKETLISTEN AKTUALISIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   Die lokale Paketdatenbank (apt cache) wird aktualisiert,
+    #   damit nachfolgende Installationen die neuesten Versionen
+    #   aus den Repositories beziehen.
+    #
+    #   update_cache: yes
+    #     → apt update wird ausgeführt.
+    #
+    #   cache_valid_time: 3600
+    #     → Wenn der Cache in den letzten 3600 Sekunden (1 Stunde)
+    #        aktualisiert wurde, wird er nicht erneut aktualisiert.
+    #        Spart Zeit bei häufigen Playbook-Läufen.
+    #
+    #   Gleiches Prinzip wie beim Web-Server-Play - pro Play/VM eigener
+    #   apt-Cache-Check, unabhängig vom Nginx-Play oben.
+    # ==========================================================
+    - name: Paketlisten aktualisieren
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    # ==========================================================
+    # TASK 2: POSTGRESQL INSTALLIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   PostgreSQL wird aus den offiziellen Ubuntu-Repositories
+    #   installiert.
+    #
+    #   name: postgresql (ohne Versionsnummer)
+    #     → Installiert die Standardversion, die Ubuntu 22.04
+    #       mitbringt (aktuell PostgreSQL 14).
+    #     → Keine manuelle Versionsangabe nötig – das sorgt für
+    #       Konsistenz mit dem Base-Image.
+    #
+    #   state: present
+    #     → Stellt sicher, dass das Paket installiert ist,
+    #        aber aktualisiert es nicht (im Gegensatz zu "latest").
+    # ==========================================================
+    - name: PostgreSQL installieren
+      apt:
+        name: postgresql
+        state: present
+
+    # ==========================================================
+    # TASK 3: UFW FIREWALL AKTIVIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   Die Uncomplicated Firewall (UFW) wird eingeschaltet.
+    #   Sie blockiert standardmäßig alle eingehenden Verbindungen
+    #   (Default Deny), was die Sicherheit erhöht.
+    #
+    #   state: enabled
+    #     → Schaltet UFW ein (persistent über Neustarts).
+    #
+    #   logging: 'on'
+    #     → Aktiviert einfaches Logging, damit später nachvollzogen
+    #        werden kann, wer auf welche Ports zugegriffen hat.
+    #
+    #   WICHTIG: UFW wird erst aktiviert, NACHDEM wir in den nächsten
+    #   Tasks explizit Regeln für SSH und PostgreSQL definieren.
+    #   Sonst würden wir uns sofort aussperren!
+    # ==========================================================
+    - name: UFW Firewall aktivieren
+      ufw:
+        state: enabled
+        logging: 'on'
+
+    # ==========================================================
+    # TASK 4: SSH-PORT FREIGEBEN
+    # ==========================================================
+    # Was passiert hier?
+    #   UFW erlaubt eingehende SSH-Verbindungen (Port 22).
+    #
+    #   rule: allow
+    #   name: OpenSSH
+    #     → UFW kennt vordefinierte Anwendungsprofile.
+    #        "OpenSSH" entspricht Port 22/tcp.
+    #
+    #   Warum?
+    #     Ohne diese Regel würden wir uns nach dem Aktivieren
+    #     der Firewall von der VM aussperren – keine SSH-Verbindung
+    #     mehr möglich! Diese Regel MUSS vor "ufw enable" stehen.
+    # ==========================================================
+    - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
+      ufw:
+        rule: allow
+        name: OpenSSH
+
+    # ==========================================================
+    # TASK 5: POSTGRESQL-PORT NUR FÜR WEB-SERVER FREIGEBEN
+    # ==========================================================
+    # Was passiert hier?
+    #   UFW erlaubt eingehende Verbindungen auf Port 5432 (PostgreSQL)
+    #   AUSSCHLIESSLICH von der IP des Web-Servers.
+    #
+    #   src: 10.0.30.101
+    #     → Die Regel wird auf diese Quell-IP eingeschränkt.
+    #        Das ist die IP des Web-Servers (laut deiner Planung).
+    #
+    #   Im Unterschied zum Nginx-Play (wo Port 80 für JEDEN offen war)
+    #   wird hier der Zugriff stark eingeschränkt – nur der Web-Server
+    #   darf auf die Datenbank zugreifen. Alle anderen Absender werden
+    #   durch die UFW-Default-Regel (deny) blockiert.
+    #
+    #   Warum?
+    #     PostgreSQL enthält sensible Daten. Der Zugriff sollte nur
+    #     von der Anwendungsschicht (Web-Server) erlaubt sein.
+    #     Direkte Zugriffe von außen oder von anderen VMs sind nicht
+    #     erwünscht (Security Best Practice).
+    # ==========================================================
+    - name: PostgreSQL Port 5432 nur für web-server freigeben
+      ufw:
+        rule: allow
+        port: '5432'
+        proto: tcp
+        src: 10.0.30.101
+
+    # ==========================================================
+    # TASK 6: POSTGRESQL STARTEN UND FÜR AUTOSTART AKTIVIEREN
+    # ==========================================================
+    # Was passiert hier?
+    #   Der PostgreSQL-Dienst wird gestartet (falls nicht bereits
+    #   laufend) und für den automatischen Start beim Booten
+    #   konfiguriert.
+    #
+    #   name: postgresql
+    #     → Der Systemd-Dienstname.
+    #
+    #   state: started
+    #     → Startet den Dienst sofort.
+    #
+    #   enabled: yes
+    #     → Stellt sicher, dass PostgreSQL beim nächsten Reboot
+    #        automatisch startet.
+    # ==========================================================
+    - name: PostgreSQL starten und für Autostart aktivieren
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    # ==========================================================
+    # TASK 7: VERIFIZIEREN, DASS POSTGRESQL LÄUFT
+    # ==========================================================
+    # Was passiert hier?
+    #   Mit dem eingebauten PostgreSQL-Tool "pg_isready" wird geprüft,
+    #   ob der Datenbankserver bereit ist, Verbindungen anzunehmen.
+    #
+    #   command: pg_isready
+    #     → Führt den Befehl auf der VM aus.
+    #     → Rückgabewert 0 = PostgreSQL antwortet.
+    #
+    #   register: pg_check
+    #     → Speichert die Ausgabe (stdout, stderr, rc) in der Variable
+    #        "pg_check", damit wir sie im nächsten Task ausgeben können.
+    #
+    #   changed_when: false
+    #     → Dies ist ein reiner Lese-Check, der das System NICHT
+    #        verändert. Ansible markiert den Task daher nicht als
+    #        "changed" – das ist korrekt für Prüfungen.
+    #
+    #   Warum?
+    #     Nginx spricht HTTP – dort haben wir "uri" verwendet.
+    #     PostgreSQL hat kein HTTP-Interface; "pg_isready" ist das
+    #     standardmäßige Tool, um den Status abzufragen.
+    # ==========================================================
+    - name: Prüfen ob PostgreSQL bereit ist
+      command: pg_isready
+      register: pg_check
+      changed_when: false   # ← reiner Lese-Check, verändert nichts am System
+      tags:
+        - verify
+
+    # ==========================================================
+    # TASK 8: ERGEBNIS AUSGEBEN
+    # ==========================================================
+    # Was passiert hier?
+    #   Der Status von PostgreSQL wird im Ansible-Output ausgegeben.
+    #
+    #   debug: msg: |
+    #     → Mehrzeilige Ausgabe im Log.
+    #
+    #   {{ pg_check.stdout }}
+    #     → Enthält die Ausgabe von pg_isready, z.B.:
+    #       "/var/run/postgresql:5432 - accepting connections"
+    #
+    #   {{ ansible_hostname }}
+    #     → Der Hostname der aktuellen VM (von Ansible-Facts).
+    #
+    #   {{ ansible_default_ipv4.address }}
+    #     → Die primäre IPv4-Adresse der VM (ebenfalls ein Fact).
+    #
+    #   Warum?
+    #     Du siehst im GitHub Actions Log sofort, ob PostgreSQL
+    #     erfolgreich gestartet wurde und welche IP die VM hat.
+    #     Hilfreich für Debugging und Dokumentation.
+    # ==========================================================
+    - name: PostgreSQL Status ausgeben
+      debug:
+        msg: |
+          ✅ PostgreSQL-Check abgeschlossen!
+          Ergebnis: {{ pg_check.stdout }}
+          Host:     {{ ansible_hostname }}
+          IP:       {{ ansible_default_ipv4.address }}
