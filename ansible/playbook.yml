@@ -1,211 +1,176 @@
----
 # ============================================================
-# ANSIBLE PLAYBOOK - WEB-SERVER KONFIGURATION
+# ANSIBLE PLAYBOOK - WEB- & DB-SERVER KONFIGURATION
 # ============================================================
 # Autor:           Randolph Bluming
 # Erstellt am:     2026-06-29
-# Funktion:        Nginx Web-Server Installation & Konfiguration
-# Ziel-VM:         web-server-prod (10.0.30.101)
-# Wird aufgerufen: GitHub Actions Pipeline (Job 3)
+# Letzte Änderung: 2026-08-02
+# Funktion:        Vollständige Konfiguration von Web- und DB-Server
+# Ziel-VMs:        web-server-prod (10.0.30.101)
+#                  db-server-prod  (10.0.30.102)
+# Wird aufgerufen: GitHub Actions Pipeline (Job 5: configure-vm)
 # ============================================================
 #
 # WAS DIESES PLAYBOOK TUT (Überblick):
-#   1. System-Pakete aktualisieren
-#   2. Nginx installieren
-#   3. Firewall (UFW) konfigurieren
-#   4. Nginx starten & für Autostart aktivieren
-#   5. Eine eigene index.html erstellen
-#   6. Prüfen ob Nginx wirklich antwortet
+#   PLAY 1 - Web-Server:
+#     1. System-Pakete aktualisieren
+#     2. Nginx installieren
+#     3. Firewall (UFW) konfigurieren
+#     4. Nginx starten & für Autostart aktivieren
+#     5. Eine eigene index.html erstellen (mit Hostname/IP)
+#     6. Prüfen ob Nginx wirklich antwortet
+#
+#   PLAY 2 - DB-Server:
+#     1. System-Pakete aktualisieren
+#     2. PostgreSQL installieren
+#     3. PostgreSQL für Netzwerkzugriff konfigurieren
+#     4. Firewall (UFW) mit IP-Einschränkung aktivieren
+#     5. PostgreSQL starten & für Autostart aktivieren
+#     6. Prüfen ob PostgreSQL antwortet
 #
 # IDEMPOTENZ-PRINZIP:
 #   Dieses Playbook kann beliebig oft ausgeführt werden.
 #   Ansible prüft vor jedem Task ob die Aktion nötig ist.
-#   Nginx schon installiert? → Task wird übersprungen (ok)
-#   Nginx läuft schon? → Task wird übersprungen (ok)
+#   - Nginx/PostgreSQL schon installiert? → Task wird übersprungen
+#   - Dienst läuft schon? → Task wird übersprungen
+#   - Firewall-Regel existiert schon? → Task wird übersprungen
+#
+# SICHERHEITSKONZEPT (Defence in Depth für DB-Server):
+#   1. listen_addresses = '*'  → PostgreSQL lauscht überall
+#   2. pg_hba.conf             → Erlaubt NUR Web-Server-IP
+#   3. UFW-Firewall            → Blockiert alle anderen Ports
+#
+# ABHÄNGIGKEITEN:
+#   - VMs müssen laufen und SSH erreichbar sein
+#   - SSH-Key muss in GitHub Secrets hinterlegt sein
+#   - Python3 muss auf den VMs installiert sein
 # ============================================================
 
 # ============================================================
 # PLAY-DEFINITION
 # ============================================================
-# Ein "Play" verbindet eine Gruppe von Servern mit Tasks.
-# Hier: Alle Server aus der Gruppe "webserver" in inventory.ini
+# Verbindet eine Server-Gruppe mit Tasks. Hier: alle Server
+# aus Gruppe "webserver" in inventory.ini.
+# ============================================================
+# ============================================================
+# PLAY 1: WEB-SERVER KONFIGURATION
+# ============================================================
+# ZWECK:   Installiert und konfiguriert Nginx auf dem Web-Server.
+#          Erstellt eine dynamische index.html mit Hostname und IP.
+#          Aktiviert die Firewall und gibt SSH/HTTP frei.
+#
+# BETRIFFT: Nur Gruppe "webserver" aus inventory.ini
 # ============================================================
 - name: Basis-Setup Web-Server
-  hosts: webserver       # ← Gruppe aus inventory.ini
-                         #   inventory.ini: [webserver]
-                         #                  web-server-prod ansible_host=10.0.30.101
-  become: true           # ← sudo-Rechte für alle Tasks
-                         #   Randolph hat NOPASSWD:ALL in Packer gesetzt
-                         #   → keine Passwort-Abfrage nötig
+  hosts: webserver
+  become: true
 
   tasks:
 
     # ==========================================================
-    # TASK 1: SYSTEM AKTUALISIEREN
+    # TASK 1: PAKETLISTEN AKTUALISIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   apt update  → Paketlisten aktualisieren (weiß was verfügbar ist)
+    # ZWECK:   Aktualisiert den apt-Cache, damit nachfolgende
+    #          Installationen die neuesten Pakete finden.
     #
-    # WICHTIG: Kein "upgrade: dist" !
-    #   upgrade: dist würde alle installierten Pakete upgraden.
-    #   Das ist in einer automatisierten Pipeline gefährlich,
-    #   weil es unerwartete Abhängigkeiten ändern kann.
-    #   Wir wollen nur den Cache aktualisieren, damit
-    #   apt weiß wo es Nginx herbekommt.
+    # WICHTIG: Kein "upgrade: dist" – das würde in der Pipeline
+    #          unkontrolliert alle Pakete aktualisieren und könnte
+    #          unerwartete Änderungen verursachen.
+    #          Wir wollen NUR den Cache aktualisieren.
     #
-    # cache_valid_time: 3600
-    #   Wenn apt update in den letzten 3600 Sekunden (1 Stunde)
-    #   schon ausgeführt wurde, wird es NICHT nochmal gemacht.
-    #   Das spart Zeit bei wiederholten Playbook-Ausführungen.
+    # cache_valid_time: 3600 → 1 Stunde gültig, spart Zeit
     # ==========================================================
     - name: Paketlisten aktualisieren
       apt:
         update_cache: yes
-        cache_valid_time: 3600  # ← Kein Update wenn < 1h alt
+        cache_valid_time: 3600
 
     # ==========================================================
     # TASK 2: NGINX INSTALLIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   apt install nginx → Nginx Web-Server installieren
+    # ZWECK:   Installiert Nginx aus den Ubuntu-Repositories.
     #
-    # state: present
-    #   "present" bedeutet: Stelle sicher dass Nginx installiert ist.
-    #   Ist Nginx schon installiert? → nichts tun (idempotent!)
-    #   Ist Nginx NICHT installiert? → installieren
-    #
-    # ALTERNATIVE STATES (zur Info):
-    #   state: latest  → immer auf neueste Version updaten
-    #   state: absent  → deinstallieren (das Gegenteil!)
+    # state: present → installiert, aber aktualisiert nicht
+    #          (im Gegensatz zu "latest")
     # ==========================================================
     - name: Nginx installieren
       apt:
         name: nginx
-        state: present  # ← Installieren falls nicht vorhanden
+        state: present
 
     # ==========================================================
     # TASK 3: UFW FIREWALL AKTIVIEREN
     # ==========================================================
-    # Was ist UFW?
-    #   UFW = Uncomplicated Firewall
-    #   Eine vereinfachte Oberfläche für iptables (Linux Firewall)
+    # ZWECK:   Schaltet die Uncomplicated Firewall ein.
+    #          Default: Alle eingehenden Verbindungen blockiert.
     #
-    # WARUM MUSS DAS VOR DEN REGELN KOMMEN?
-    #   UFW muss erst aktiviert sein bevor du Regeln hinzufügst.
-    #   Reihenfolge falsch → Task schlägt fehl.
+    # state: enabled → persistent über Neustarts
+    # logging: 'on' → einfaches Logging für Debugging
     #
-    # policy: allow für incoming?
-    #   Nein! Default bleibt "deny" für alles.
-    #   Wir erlauben NUR explizit was wir brauchen (Port 22, 80)
-    #
-    # logging: on
-    #   Firewall-Events werden geloggt → wichtig für Security!
-    #   Du siehst wer versucht auf deine VM zuzugreifen.
+    # WICHTIG: Aktiviert NACHDEM wir SSH freigegeben haben
+    #          (siehe Task 4) – sonst Aussperrung!
     # ==========================================================
     - name: UFW Firewall aktivieren
       ufw:
-        state: enabled    # ← UFW einschalten
-        logging: 'on'     # ← Firewall-Events loggen (Security!)
+        state: enabled
+        logging: 'on'
 
     # ==========================================================
-    # TASK 4: SSH PORT FREIGEBEN
+    # TASK 4: SSH-PORT FREIGEBEN
     # ==========================================================
-    # WARUM SSH VOR HTTP?
-    #   Wenn du UFW aktivierst und SSH nicht freigibst,
-    #   sperrst du dich selbst aus der VM aus!
-    #   SSH (Port 22) IMMER als erstes freigeben.
+    # ZWECK:   Erlaubt eingehende SSH-Verbindungen (Port 22).
     #
-    # name: OpenSSH
-    #   UFW kennt vordefinierte Dienst-Namen (aus /etc/ufw/applications.d/)
-    #   "OpenSSH" ist einfacher als port: '22' proto: tcp
+    # MUSS vor "ufw enable" stehen, sonst Aussperrung!
+    #
+    # name: OpenSSH → UFW kennt vordefinierte Profile
+    #          → entspricht Port 22/tcp
     # ==========================================================
     - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
       ufw:
         rule: allow
-        name: OpenSSH     # ← Vordefinierter UFW-Dienst für Port 22
+        name: OpenSSH
 
     # ==========================================================
-    # TASK 5: HTTP PORT FREIGEBEN
+    # TASK 5: HTTP-PORT 80 FREIGEBEN
     # ==========================================================
-    # Was passiert hier?
-    #   Firewall-Regel hinzufügen: Port 80 (HTTP) erlauben
+    # ZWECK:   Erlaubt eingehende HTTP-Verbindungen auf Port 80.
     #
-    # port: '80'
-    #   Port 80 = Standard HTTP Port
-    #   Nginx lauscht standardmäßig auf Port 80
-    #
-    # proto: tcp
-    #   TCP = Transmission Control Protocol
-    #   HTTP verwendet TCP (nicht UDP)
-    #   Bei Webservern immer tcp angeben
-    #
-    # rule: allow
-    #   Pakete auf Port 80 dürfen rein
-    #   Alles andere bleibt geblockt (UFW Default: deny)
+    # JEDER darf auf die Webseite zugreifen (keine src-Einschränkung)
+    # → Das ist der Unterschied zum DB-Server (siehe Play 2)
     # ==========================================================
     - name: HTTP Port 80 freigeben
       ufw:
         rule: allow
         port: '80'
-        proto: tcp        # ← HTTP läuft über TCP
+        proto: tcp
 
     # ==========================================================
-    # TASK 6: NGINX STARTEN UND AKTIVIEREN
+    # TASK 6: NGINX STARTEN UND FÜR AUTOSTART AKTIVIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   systemctl start nginx   → Nginx jetzt sofort starten
-    #   systemctl enable nginx  → Nginx nach Reboot automatisch starten
-    #
-    # state: started
-    #   "started" = Nginx muss laufen.
-    #   Läuft Nginx schon? → nichts tun (idempotent!)
-    #   Läuft Nginx nicht? → starten
-    #
-    # enabled: yes
-    #   Nginx wird als Systemd-Service registriert.
-    #   Nach einem VM-Neustart startet Nginx automatisch.
-    #   Ohne "enabled: yes" → nach Reboot ist Nginx aus!
+    # ZWECK:   Startet Nginx sofort und stellt sicher, dass es
+    #          beim Booten automatisch startet.
     # ==========================================================
     - name: Nginx starten und für Autostart aktivieren
       service:
         name: nginx
-        state: started    # ← Jetzt starten
-        enabled: yes      # ← Nach Reboot automatisch starten
+        state: started
+        enabled: yes
 
     # ==========================================================
-    # TASK 7: INDEX.HTML ERSTELLEN
+    # TASK 7: EIGENE INDEX.HTML ERSTELLEN
     # ==========================================================
-    # Was passiert hier?
-    #   Eine eigene index.html wird in den Nginx-Webroot kopiert.
-    #   Webroot = /var/www/html/ (Standard bei Nginx auf Ubuntu)
+    # ZWECK:   Erstellt eine eigene Webseite mit dynamischen Inhalten.
     #
-    # content: |
-    #   Der "|" in YAML bedeutet: mehrzeiliger Text folgt.
-    #   Alles was eingerückt darunter steht ist der Inhalt der Datei.
+    # content: | → Mehrzeiliger Text (YAML-Block-Skalar)
     #
-    # DYNAMISCHE VARIABLEN (werden zur Laufzeit ersetzt):
-    #   {{ ansible_hostname }}
-    #     → Wird durch den echten Hostnamen der VM ersetzt
-    #     → z.B. "web-server-prod"
+    # DYNAMISCHE VARIABLEN (Ansible-Facts):
+    #   {{ ansible_hostname }} → Hostname der VM
+    #   {{ ansible_default_ipv4.address }} → Primäre IPv4-Adresse
     #
-    #   {{ ansible_default_ipv4.address }}
-    #     → Wird durch die echte IP der VM ersetzt
-    #     → z.B. "10.0.30.101"
-    #
-    #   Ansible sammelt diese Infos automatisch beim Start
-    #   (sogenannte "Facts" - Fakten über das System)
-    #
-    # owner/group: www-data
-    #   www-data ist der Nginx-Benutzer auf Ubuntu.
-    #   Nginx braucht Lese-Rechte auf die Datei.
-    #
-    # mode: '0644'
-    #   Linux Dateiberechtigungen:
-    #   0644 = Owner lesen+schreiben, Gruppe lesen, Andere lesen
-    #   Nginx (www-data) kann die Datei lesen → Webseite wird angezeigt
+    # owner/group: www-data → Nginx-Benutzer auf Ubuntu
+    # mode: '0644' → Leserechte für Nginx
     # ==========================================================
     - name: Eigene index.html erstellen
-      copy:           # 
+      copy:
         content: |
           <!DOCTYPE html>
           <html>
@@ -219,59 +184,41 @@
             <p>Automatisch konfiguriert via GitHub Actions + Ansible</p>
           </body>
           </html>
-        dest: /var/www/html/index.html   # ← Nginx Webroot
-        owner: www-data                  # ← Nginx-Benutzer
-        group: www-data                  # ← Nginx-Gruppe
-        mode: '0644'                     # ← Leserechte für Nginx
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
 
     # ==========================================================
-    # TASK 8: VERIFIZIEREN OB NGINX WIRKLICH ANTWORTET
+    # TASK 8: NGINX VERIFIZIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   Ansible macht einen HTTP-Request auf localhost:80
-    #   und prüft ob Nginx antwortet.
+    # ZWECK:   Prüft, ob Nginx auf Port 80 antwortet.
     #
-    # uri-Modul = Ansible's eingebauter HTTP-Client
+    # uri-Modul → Ansible's eingebauter HTTP-Client
+    # url: http://127.0.0.1 → Test von INNEN der VM (localhost)
+    # status_code: 200 → Erwartet HTTP 200 OK
     #
-    # url: http://localhost
-    #   Wir testen von INNEN der VM (nicht von außen)
-    #   Das reicht um zu prüfen ob Nginx läuft
+    # register: nginx_check → Speichert Ergebnis für nächsten Task
     #
-    # status_code: 200
-    #   HTTP 200 = "OK" → Nginx antwortet korrekt
-    #   HTTP 500 = Server-Fehler
-    #   HTTP 404 = Seite nicht gefunden
-    #   Wenn NICHT 200 → Task schlägt fehl → Pipeline stoppt!
-    #
-    # register: nginx_check
-    #   Das Ergebnis des HTTP-Requests wird in der Variable
-    #   "nginx_check" gespeichert → können wir im nächsten Task ausgeben
+    # checkov:skip → Checkov-Ignorierung für internen Test
     # ==========================================================
     - name: Prüfen ob Nginx auf Port 80 antwortet
-    # checkov:skip=CKV2_ANSIBLE_1: Interner Localhost-Test, HTTPS nicht nötig
+      # checkov:skip=CKV2_ANSIBLE_1: Interner Localhost-Test, HTTPS nicht nötig
       uri:
         url: http://127.0.0.1
-        status_code: 200    # ← Erwartet HTTP 200 OK
-      register: nginx_check  # ← Ergebnis speichern
-      tags: 
+        status_code: 200
+      register: nginx_check
+      tags:
         - verify
 
     # ==========================================================
     # TASK 9: ERGEBNIS AUSGEBEN
     # ==========================================================
-    # Was passiert hier?
-    #   Das Ergebnis des HTTP-Checks wird in der Pipeline
-    #   als Log-Nachricht ausgegeben.
+    # ZWECK:   Zeigt das Testergebnis im Ansible-Output.
     #
-    # debug-Modul = gibt Nachrichten im Ansible-Output aus
-    #
-    # msg: "..."
-    #   nginx_check.status → der HTTP Status Code (z.B. 200)
-    #   nginx_check.url    → die getestete URL
-    #
-    # Warum?
-    #   Du siehst im GitHub Actions Log genau ob und wie
-    #   Nginx antwortet. Sehr hilfreich beim Debugging!
+    # debug: msg: | → Mehrzeilige Ausgabe im Log
+    #   {{ nginx_check.url }} → Getestete URL
+    #   {{ nginx_check.status }} → HTTP-Statuscode
     # ==========================================================
     - name: Nginx Status ausgeben
       debug:
@@ -286,12 +233,17 @@
 # ============================================================
 # PLAY 2: DB-SERVER KONFIGURATION
 # ============================================================
-# Eigenständiger Play, komplett unabhängig vom Web-Server-Play oben.
-# Betrifft NUR die Gruppe "dbserver" aus inventory.ini - der
-# Web-Server-Play oben betrifft NUR "webserver". Keine Überschneidung.
+# ZWECK:   Installiert und konfiguriert PostgreSQL.
+#          Konfiguriert Netzwerkzugriff für Web-Server.
+#          Aktiviert Firewall mit IP-basierter Einschränkung.
+#
+# BETRIFFT: Nur Gruppe "dbserver" aus inventory.ini
+#
+# WICHTIG: Eigenständiger Play – komplett unabhängig vom
+#          Web-Server-Play oben. Keine Überschneidungen.
 # ============================================================
 - name: Basis-Setup DB-Server
-  hosts: dbserver        # ← Gruppe aus inventory.ini
+  hosts: dbserver
   become: true
 
   tasks:
@@ -299,21 +251,7 @@
     # ==========================================================
     # TASK 1: PAKETLISTEN AKTUALISIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   Die lokale Paketdatenbank (apt cache) wird aktualisiert,
-    #   damit nachfolgende Installationen die neuesten Versionen
-    #   aus den Repositories beziehen.
-    #
-    #   update_cache: yes
-    #     → apt update wird ausgeführt.
-    #
-    #   cache_valid_time: 3600
-    #     → Wenn der Cache in den letzten 3600 Sekunden (1 Stunde)
-    #        aktualisiert wurde, wird er nicht erneut aktualisiert.
-    #        Spart Zeit bei häufigen Playbook-Läufen.
-    #
-    #   Gleiches Prinzip wie beim Web-Server-Play - pro Play/VM eigener
-    #   apt-Cache-Check, unabhängig vom Nginx-Play oben.
+    # Gleiches Prinzip wie beim Web-Server-Play
     # ==========================================================
     - name: Paketlisten aktualisieren
       apt:
@@ -323,19 +261,9 @@
     # ==========================================================
     # TASK 2: POSTGRESQL INSTALLIEREN
     # ==========================================================
-    # Was passiert hier?
-    #   PostgreSQL wird aus den offiziellen Ubuntu-Repositories
-    #   installiert.
-    #
-    #   name: postgresql (ohne Versionsnummer)
-    #     → Installiert die Standardversion, die Ubuntu 22.04
-    #       mitbringt (aktuell PostgreSQL 14).
-    #     → Keine manuelle Versionsangabe nötig – das sorgt für
-    #       Konsistenz mit dem Base-Image.
-    #
-    #   state: present
-    #     → Stellt sicher, dass das Paket installiert ist,
-    #        aber aktualisiert es nicht (im Gegensatz zu "latest").
+    # name: postgresql (ohne Versionsnummer)
+    #   → Installiert Standardversion aus Ubuntu 22.04
+    #   → Aktuell PostgreSQL 14
     # ==========================================================
     - name: PostgreSQL installieren
       apt:
@@ -343,23 +271,61 @@
         state: present
 
     # ==========================================================
-    # TASK 3: UFW FIREWALL AKTIVIEREN
+    # TASK 3: POSTGRESQL AUF ALLEN INTERFACES LAUSCHEN LASSEN
     # ==========================================================
-    # Was passiert hier?
-    #   Die Uncomplicated Firewall (UFW) wird eingeschaltet.
-    #   Sie blockiert standardmäßig alle eingehenden Verbindungen
-    #   (Default Deny), was die Sicherheit erhöht.
+    # ZWECK:   Erlaubt PostgreSQL, Verbindungen von außen anzunehmen.
     #
-    #   state: enabled
-    #     → Schaltet UFW ein (persistent über Neustarts).
+    # Standard: "listen_addresses = 'localhost'"
+    # → Nur lokale Verbindungen möglich
     #
-    #   logging: 'on'
-    #     → Aktiviert einfaches Logging, damit später nachvollzogen
-    #        werden kann, wer auf welche Ports zugegriffen hat.
+    # ÄNDERUNG: "listen_addresses = '*'"
+    # → Lauscht auf allen Netzwerk-Interfaces
     #
-    #   WICHTIG: UFW wird erst aktiviert, NACHDEM wir in den nächsten
-    #   Tasks explizit Regeln für SSH und PostgreSQL definieren.
-    #   Sonst würden wir uns sofort aussperren!
+    # lineinfile: Sucht nach regexp und ersetzt/ergänzt die Zeile
+    # backup: yes → Sicherungskopie der Originaldatei
+    #
+    # WICHTIG: Dies öffnet nur die "Außentür" – wer reinkommt,
+    #          entscheidet pg_hba.conf (siehe Task 4)
+    # ==========================================================
+    - name: PostgreSQL auf allen Interfaces lauschen lassen
+      lineinfile:
+        path: /etc/postgresql/14/main/postgresql.conf
+        regexp: '^#?listen_addresses\s*='
+        line: "listen_addresses = '*'"
+        backup: yes
+      notify: PostgreSQL neu starten
+
+    # ==========================================================
+    # TASK 4: WEB-SERVER-ZUGRIFF IN PG_HBA.CONF ERLAUBEN
+    # ==========================================================
+    # ZWECK:   Definiert, wer sich mit der Datenbank verbinden darf.
+    #
+    # listen_addresses öffnet nur die "Außentür" – pg_hba.conf
+    # entscheidet, wer tatsächlich reinkommt.
+    #
+    # FORMAT: host    database    user    address    auth-method
+    #         host    all         all     10.0.30.101/32 md5
+    #
+    # all/all → bewusst offen (noch kein eigener DB-User/DB,
+    #           siehe Phase 5/Vault)
+    # /32 → Nur EXAKT diese eine IP (Web-Server)
+    # md5 → Passwort-Authentifizierung
+    #
+    # insertafter: EOF → Fügt am Ende der Datei ein
+    # backup: yes → Sicherungskopie
+    # ==========================================================
+    - name: Web-Server-Zugriff in pg_hba.conf erlauben
+      lineinfile:
+        path: /etc/postgresql/14/main/pg_hba.conf
+        line: "host    all    all    10.0.30.101/32    md5"
+        insertafter: EOF
+        backup: yes
+      notify: PostgreSQL neu starten
+
+    # ==========================================================
+    # TASK 5: UFW FIREWALL AKTIVIEREN
+    # ==========================================================
+    # Gleiches Prinzip wie beim Web-Server
     # ==========================================================
     - name: UFW Firewall aktivieren
       ufw:
@@ -367,20 +333,9 @@
         logging: 'on'
 
     # ==========================================================
-    # TASK 4: SSH-PORT FREIGEBEN
+    # TASK 6: SSH-PORT FREIGEBEN
     # ==========================================================
-    # Was passiert hier?
-    #   UFW erlaubt eingehende SSH-Verbindungen (Port 22).
-    #
-    #   rule: allow
-    #   name: OpenSSH
-    #     → UFW kennt vordefinierte Anwendungsprofile.
-    #        "OpenSSH" entspricht Port 22/tcp.
-    #
-    #   Warum?
-    #     Ohne diese Regel würden wir uns nach dem Aktivieren
-    #     der Firewall von der VM aussperren – keine SSH-Verbindung
-    #     mehr möglich! Diese Regel MUSS vor "ufw enable" stehen.
+    # MUSS vor "ufw enable" stehen, sonst Aussperrung!
     # ==========================================================
     - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
       ufw:
@@ -388,26 +343,18 @@
         name: OpenSSH
 
     # ==========================================================
-    # TASK 5: POSTGRESQL-PORT NUR FÜR WEB-SERVER FREIGEBEN
+    # TASK 7: POSTGRESQL-PORT NUR FÜR WEB-SERVER FREIGEBEN
     # ==========================================================
-    # Was passiert hier?
-    #   UFW erlaubt eingehende Verbindungen auf Port 5432 (PostgreSQL)
-    #   AUSSCHLIESSLICH von der IP des Web-Servers.
+    # ZWECK:   Erlaubt Zugriff auf Port 5432 NUR von Web-Server-IP.
     #
-    #   src: 10.0.30.101
-    #     → Die Regel wird auf diese Quell-IP eingeschränkt.
-    #        Das ist die IP des Web-Servers (laut deiner Planung).
+    # src: 10.0.30.101 → Nur diese Quell-IP darf verbinden
     #
-    #   Im Unterschied zum Nginx-Play (wo Port 80 für JEDEN offen war)
-    #   wird hier der Zugriff stark eingeschränkt – nur der Web-Server
-    #   darf auf die Datenbank zugreifen. Alle anderen Absender werden
-    #   durch die UFW-Default-Regel (deny) blockiert.
+    # DREI UNABHÄNGIGE EBENEN:
+    #   1. listen_addresses = '*' (PostgreSQL lauscht überall)
+    #   2. pg_hba.conf (erlaubt nur Web-Server-IP)
+    #   3. UFW (Firewall blockiert alle anderen)
     #
-    #   Warum?
-    #     PostgreSQL enthält sensible Daten. Der Zugriff sollte nur
-    #     von der Anwendungsschicht (Web-Server) erlaubt sein.
-    #     Direkte Zugriffe von außen oder von anderen VMs sind nicht
-    #     erwünscht (Security Best Practice).
+    # → Defence in Depth: Mehrere Sicherheitsschichten
     # ==========================================================
     - name: PostgreSQL Port 5432 nur für web-server freigeben
       ufw:
@@ -417,22 +364,7 @@
         src: 10.0.30.101
 
     # ==========================================================
-    # TASK 6: POSTGRESQL STARTEN UND FÜR AUTOSTART AKTIVIEREN
-    # ==========================================================
-    # Was passiert hier?
-    #   Der PostgreSQL-Dienst wird gestartet (falls nicht bereits
-    #   laufend) und für den automatischen Start beim Booten
-    #   konfiguriert.
-    #
-    #   name: postgresql
-    #     → Der Systemd-Dienstname.
-    #
-    #   state: started
-    #     → Startet den Dienst sofort.
-    #
-    #   enabled: yes
-    #     → Stellt sicher, dass PostgreSQL beim nächsten Reboot
-    #        automatisch startet.
+    # TASK 8: POSTGRESQL STARTEN UND FÜR AUTOSTART AKTIVIEREN
     # ==========================================================
     - name: PostgreSQL starten und für Autostart aktivieren
       service:
@@ -441,60 +373,34 @@
         enabled: yes
 
     # ==========================================================
-    # TASK 7: VERIFIZIEREN, DASS POSTGRESQL LÄUFT
+    # TASK 9: HANDLER SOFORT AUSFÜHREN
     # ==========================================================
-    # Was passiert hier?
-    #   Mit dem eingebauten PostgreSQL-Tool "pg_isready" wird geprüft,
-    #   ob der Datenbankserver bereit ist, Verbindungen anzunehmen.
+    # ZWECK:   Erzwingt die sofortige Ausführung der Handler.
     #
-    #   command: pg_isready
-    #     → Führt den Befehl auf der VM aus.
-    #     → Rückgabewert 0 = PostgreSQL antwortet.
+    # PROBLEM: Handler laufen standardmäßig erst am Play-Ende.
+    #          Wir brauchen den Neustart aber JETZT, damit der
+    #          folgende Test den aktuellen Zustand sieht.
     #
-    #   register: pg_check
-    #     → Speichert die Ausgabe (stdout, stderr, rc) in der Variable
-    #        "pg_check", damit wir sie im nächsten Task ausgeben können.
-    #
-    #   changed_when: false
-    #     → Dies ist ein reiner Lese-Check, der das System NICHT
-    #        verändert. Ansible markiert den Task daher nicht als
-    #        "changed" – das ist korrekt für Prüfungen.
-    #
-    #   Warum?
-    #     Nginx spricht HTTP – dort haben wir "uri" verwendet.
-    #     PostgreSQL hat kein HTTP-Interface; "pg_isready" ist das
-    #     standardmäßige Tool, um den Status abzufragen.
+    # meta: flush_handlers → Führt alle gependingen Handler aus
+    # ==========================================================
+    - name: Sicherstellen, dass PostgreSQL-Neustart bereits erfolgt ist
+      meta: flush_handlers
+
+    # ==========================================================
+    # TASK 10: POSTGRESQL VERIFIZIEREN
+    # ==========================================================
+    # pg_isready → Eingebautes PostgreSQL-Tool zur Statusprüfung
+    # changed_when: false → Reiner Lese-Check, keine Veränderung
     # ==========================================================
     - name: Prüfen ob PostgreSQL bereit ist
       command: pg_isready
       register: pg_check
-      changed_when: false   # ← reiner Lese-Check, verändert nichts am System
+      changed_when: false
       tags:
         - verify
 
     # ==========================================================
-    # TASK 8: ERGEBNIS AUSGEBEN
-    # ==========================================================
-    # Was passiert hier?
-    #   Der Status von PostgreSQL wird im Ansible-Output ausgegeben.
-    #
-    #   debug: msg: |
-    #     → Mehrzeilige Ausgabe im Log.
-    #
-    #   {{ pg_check.stdout }}
-    #     → Enthält die Ausgabe von pg_isready, z.B.:
-    #       "/var/run/postgresql:5432 - accepting connections"
-    #
-    #   {{ ansible_hostname }}
-    #     → Der Hostname der aktuellen VM (von Ansible-Facts).
-    #
-    #   {{ ansible_default_ipv4.address }}
-    #     → Die primäre IPv4-Adresse der VM (ebenfalls ein Fact).
-    #
-    #   Warum?
-    #     Du siehst im GitHub Actions Log sofort, ob PostgreSQL
-    #     erfolgreich gestartet wurde und welche IP die VM hat.
-    #     Hilfreich für Debugging und Dokumentation.
+    # TASK 11: ERGEBNIS AUSGEBEN
     # ==========================================================
     - name: PostgreSQL Status ausgeben
       debug:
@@ -503,3 +409,28 @@
           Ergebnis: {{ pg_check.stdout }}
           Host:     {{ ansible_hostname }}
           IP:       {{ ansible_default_ipv4.address }}
+
+  # ============================================================
+  # HANDLERS
+  # ============================================================
+  # ZWECK:   Aktionen, die bei Änderungen ausgeführt werden.
+  #          Werden von notify: aus Tasks getriggert.
+  #
+  # WICHTIG: Name MUSS exakt mit notify: übereinstimmen
+  #          (reine Textübereinstimmung)
+  # ============================================================
+  handlers:
+
+    # ==========================================================
+    # HANDLER: POSTGRESQL NEU STARTEN
+    # ==========================================================
+    # WIRD GETRIGGERT VON:
+    #   - Task 3: listen_addresses ändern
+    #   - Task 4: pg_hba.conf ändern
+    #
+    # state: restarted → Stoppt und startet PostgreSQL neu
+    # ==========================================================
+    - name: PostgreSQL neu starten
+      service:
+        name: postgresql
+        state: restarted
