@@ -167,9 +167,10 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   }
 }
 
-# ============================================================
-# RESOURCE: proxmox_virtual_environment_vm.db_server
-# ============================================================
+# ************************************************************
+# RESOURCE: proxmox_virtual_environment_vm.db_server 
+# Erstellt am : 2026-08-02
+# ************************************************************
 # ZWECK:   Definiert eine Proxmox-VM für den Datenbank-Server (PostgreSQL)
 #          Die VM wird aus einem Template geklont und per Cloud-Init initialisiert.
 #          Alle Hardware-Parameter (CPU, RAM, Festplatte) sowie Netzwerk und
