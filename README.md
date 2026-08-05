@@ -21,7 +21,7 @@
 - [Konfiguration](#-konfiguration)
 - [Fehlerbehebung](#-fehlerbehebung)
 - [Bekannte technische Schuld](#️-bekannte-technische-schuld-offen)
-- [Roadmap](#-roadmap-was-als-nächstes-kommt)
+- [Roadmap](#️-roadmap-was-als-nächstes-kommt)
 - [Zukunftsausblick](#-zukunftsausblick-ai-driven-siem--monitoring)
 
 ---
