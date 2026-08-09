@@ -10,7 +10,7 @@
 #   5️ Ansible konfiguriert Nginx-Webserver auf der VM
 #
 #  Erstellt am:       2026-06-27
-#  Letzte Änderung am:2026-08-02 
+#  Letzte Änderung am:2026-08-09 
 #  Autor:          Randolph Bluming
 #  Repository:     GitHub Actions (self-hosted Runner)
 #  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
@@ -110,8 +110,8 @@ jobs:
           # Umgebungsvariablen für die Proxmox-Authentifizierung
           # Packer liest diese mit ${env("PROXMOX_PASSWORD")}
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
-          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+          PACKER_TOKEN_ID: ${{ secrets.PACKER_TOKEN_ID }}
+          PACKER_TOKEN_SECRET: ${{ secrets.PACKER_TOKEN_SECRET }}
 
       # ---------------------------------------------------------------
       # Schritt 5: Alte Template-VM entfernen
@@ -139,8 +139,8 @@ jobs:
         env:
           # Authentifizierung für Proxmox während des Builds
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_USER: ${{ secrets.PROXMOX_USER }}
-          PROXMOX_PASSWORD: ${{ secrets.PROXMOX_PASSWORD }}
+          PACKER_TOKEN_ID: ${{ secrets.PACKER_TOKEN_ID }}
+          PACKER_TOKEN_SECRET: ${{ secrets.PACKER_TOKEN_SECRET }}
 
 
   # =================================================================

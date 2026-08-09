@@ -6,7 +6,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-08-01
+# Letzte Änderung: 2026-08-09
 # ============================================================
 # ========================
 # required_plugins
@@ -40,7 +40,7 @@ variable "proxmox_url" {
 
 variable "proxmox_username" {
   type    = string
-  default = env("PROXMOX_USER")
+  default = env("PACKER_TOKEN_ID")
   #    │
   #    └── Aus Umgebungsvariable gelesen aus git secrets
   #        z.B. export PROXMOX_USER="root@pam"
@@ -62,6 +62,15 @@ variable "proxmox_password" {
 
 }
 
+variable "proxmox_token" {
+  type      = string
+  default   = env("PACKER_TOKEN_SECRET")
+  sensitive = true
+  #    │
+  #    └── SENSITIVE! Wird nicht in Logs ausgegeben
+  #        Token-Secret aus git secrets (statt Passwort)
+}
+
 # ============================================================
 # SOURCE: proxmox-clone
 # ============================================================
@@ -81,7 +90,7 @@ source "proxmox-clone" "ubuntu" {
 
   proxmox_url              = var.proxmox_url
   username                 = var.proxmox_username
-  password                 = var.proxmox_password
+  token                    = var.proxmox_token
   insecure_skip_tls_verify = true
   node                     = "proxmox"
   #    │
