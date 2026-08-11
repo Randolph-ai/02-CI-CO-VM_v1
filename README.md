@@ -46,6 +46,10 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 - **Phase 2B** – CIS-Härtung des Packer-Golden-Images *(abgeschlossen)*
 - **Phase 2C** – Zweite VM (DB-Server, PostgreSQL) aus dem gehärteten Image, inkl. Netzwerkzugriffskonfiguration Web-Server → DB-Server *(abgeschlossen)*
 
+Die Reise geht danach weiter – Phasen 3 bis 6 (State-Backend, Dynamisches
+Inventar, Vault, Compliance-Doku) findest du unter
+[🗺️ Roadmap: Was als Nächstes kommt](#️-roadmap-was-als-nächstes-kommt).
+
 ---
 
 ## 🛠 Technologie-Stack
