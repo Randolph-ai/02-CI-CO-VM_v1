@@ -5,7 +5,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-07-02
+# Letzte Änderung: 2026-08-11
 # ============================================================
 
 # ============================================================
@@ -40,6 +40,29 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   #    │
   #    └── Wert aus terraform.tfvars
   #        z.B. target_node = "proxmox-host-01"
+
+  # ---- AUTOSTART-VERHALTEN ----
+  # Steuert, ob die VM beim Booten des Proxmox-Hosts automatisch startet
+  #    │
+  #    └── on_boot = var.web_server_on_boot (true/false aus Variable)
+  #        → true: VM startet automatisch beim Host-Boot
+  #        → false: VM muss manuell gestartet werden, beim Hochfahren des Proxmox-Hosts wird die VM nicht automatisch gestartet 
+  on_boot = var.web_server_on_boot
+
+  # ==========================================
+  #  START-STEUERUNG
+  # ==========================================
+  # Steuert, ob die VM nach dem Erstellen automatisch gestartet wird
+  #    │
+  #    └── started = var.web_server_started (true/false aus Variable)
+  #        → true: VM läuft nach dem Erstellen sofort
+  #        → false: VM wird erstellt, bleibt aber ausgeschaltet
+  #        → MUSS true sein: Der QEMU-Guest-Agent (agent.enabled)
+  #          kann nur antworten, wenn die VM tatsächlich läuft.
+  #          Ohne laufende VM keine IP-Ausgabe, kein SSH-Zugriff
+  #          für Ansible in der Pipeline.
+  
+  started = var.web_server_started
 
   # ---- VM-ID ----
   # Eindeutige ID in Proxmox (muss im Cluster einzigartig sein)
@@ -154,7 +177,6 @@ resource "proxmox_virtual_environment_vm" "web_server" {
       }
     }
 
-
     # ---- BENUTZERKONTO ----
     # Erstellt einen Benutzer "ansible" mit SSH-Key
     #    │
@@ -170,6 +192,7 @@ resource "proxmox_virtual_environment_vm" "web_server" {
 # ************************************************************
 # RESOURCE: proxmox_virtual_environment_vm.db_server 
 # Erstellt am : 2026-08-02
+# Letzter Edit: 2026-08-11
 # ************************************************************
 # ZWECK:   Definiert eine Proxmox-VM für den Datenbank-Server (PostgreSQL)
 #          Die VM wird aus einem Template geklont und per Cloud-Init initialisiert.
@@ -221,6 +244,33 @@ resource "proxmox_virtual_environment_vm" "db_server" {
   vm_id = var.db_server_vm_id
 
   # ==========================================
+  #  AUTOSTART-VERHALTEN
+  # ==========================================
+  # Steuert, ob die VM beim Booten des Proxmox-Hosts automatisch startet
+  #    │
+  #    └── on_boot = var.db_server_on_boot (true/false aus Variable)
+  #        → true: VM startet automatisch beim Host-Boot
+  #        → false: VM muss manuell gestartet werden
+  #        → hier auf false, da beim Hochfahren des Proxmox-Hosts die DB-VM nicht sofort benötigt wird
+
+  on_boot = var.db_server_on_boot
+
+  # ==========================================
+  #  START-STEUERUNG
+  # ==========================================
+  # Steuert, ob die VM nach dem Erstellen automatisch gestartet wird
+  #    │
+  #    └── started = var.db_server_started (true/false aus Variable)
+  #        → true: VM läuft nach dem Erstellen sofort
+  #        → false: VM wird erstellt, bleibt aber ausgeschaltet
+  #        → MUSS true sein: Der QEMU-Guest-Agent (agent.enabled)
+  #          kann nur antworten, wenn die VM tatsächlich läuft.
+  #          Ohne laufende VM keine IP-Ausgabe, kein SSH-Zugriff
+  #          für Ansible in der Pipeline.
+
+  started = var.db_server_started
+  
+  # ==========================================
   #  QEMU GUEST AGENT
   # ==========================================
   # Aktiviert den QEMU-Gast-Agent (PFICHT für IP-Abfrage und ordentliches Herunterfahren)
@@ -228,7 +278,7 @@ resource "proxmox_virtual_environment_vm" "db_server" {
   #    └── enabled = true
   #        → Ermöglicht Terraform, die IP-Adresse der VM auszulesen
   #        → Verbessert das Shutdown-Verhalten
-
+  
   agent {
     enabled = true
   }

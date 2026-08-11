@@ -3,17 +3,11 @@
 # ============================================================
 # AUTOR:       Randolph Bluming
 # Erstellt am:    2026-06-27
-# Letzte Änderung:2026-07-19 
-# FUNKTION:    Variablen für EINE VM (Web-Server)
+# Letzte Änderung:2026-08-11 
+# FUNKTION:    Variablen für EINE VM (Web-Server) 
+#              erweitert um Variablen für eine zweite VM (DB-Server)
 # VERSION:     2.0.0
-# ÄNDERUNG:    DB-Server Variablen entfernt
-#              Template-ID auf 2000 korrigiert (Packer)
-#              API-Token auf Passwort umgestellt
-# ============================================================
-
-# ============================================================
 # TERRAFORM VARIABLEN DEFINITION
-# ============================================================
 # WICHTIG: Hier stehen NUR Definitionen, KEINE echten Werte!
 # Die echten Werte kommen aus terraform.tfvars
 # ============================================================
@@ -68,6 +62,30 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "web_server_on_boot" {
+  description = "Automatischer Start der VM beim Proxmox-Hostboot"
+  type        = bool
+  default     = true
+}
+
+variable "db_server_on_boot" {
+  description = "Automatischer Start der VM beim Proxmox-Hostboot"
+  type        = bool
+  default     = true
+}
+
+variable "web_server_started" {
+  description = "Aktueller Ausführungszustand der VM (läuft/gestoppt)"
+  type        = bool
+  default     = true
+}
+
+variable "db_server_started" {
+  description = "Aktueller Ausführungszustand der VM (läuft/gestoppt)"
+  type        = bool
+  default     = true
+}
+
 # ============================================================
 # 3. NETZWERK & STORAGE
 # ============================================================
@@ -103,7 +121,6 @@ variable "disk_datastore" {
 variable "web_server_vm_id" {
   description = "Eindeutige VM-ID in Proxmox"
   type        = number
-  default     = 1001
 }
 
 variable "web_server_cores" {
@@ -137,7 +154,6 @@ variable "web_server_ip" {
 variable "db_server_vm_id" {
   description = "Eindeutige VM-ID in Proxmox"
   type        = number
-  default     = 1010
 }
 
 variable "db_server_cores" {
