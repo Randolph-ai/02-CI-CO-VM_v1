@@ -50,6 +50,8 @@ Die Reise geht danach weiter – Phasen 3 bis 6 (State-Backend, Dynamisches
 Inventar, Vault, Compliance-Doku) findest du unter
 [🗺️ Roadmap: Was als Nächstes kommt](#️-roadmap-was-als-nächstes-kommt).
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
 ---
 
 ## 🛠 Technologie-Stack
@@ -63,6 +65,8 @@ Inventar, Vault, Compliance-Doku) findest du unter
 | PostgreSQL | 14 (Ubuntu-22.04-Standardversion) | Datenbank auf dem DB-Server |
 | Proxmox VE | 7.x/8.x | Virtualisierungsplattform |
 | Ubuntu | 22.04 LTS | Betriebssystem (Cloud-Image) |
+
+[↑ Nach oben](#-inhaltsverzeichnis)
 
 ---
 
@@ -91,6 +95,8 @@ Inventar, Vault, Compliance-Doku) findest du unter
 - **`ansible/playbook.yml`** - Zwei eigenständige Plays: Web-Server (Nginx) und DB-Server (PostgreSQL)
 - **`ansible/checks/task/`** - Custom Checkov Security Check für Ansible-Tasks (`CKV_ANSIBLE_CUSTOM_1`)
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
 ---
 
 ## 📚 Architektur-Vertiefungen
@@ -103,6 +109,8 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 | **CIS-Härtung (Phase 2B)** | Golden-Image-Härtung: SSH, Firewall, Updates, Dienste | [`docs/cis-hardening.md`](docs/cis-hardening.md) |
 | **DB-Server (Phase 2C)** | Drei-Ebenen-Netzwerkmodell (Firewall/Lauschen/Zugriffsregel) | [`docs/db-server-architecture.md`](docs/db-server-architecture.md) |
 | **Authentifizierung** | Dual-Auth Proxmox-API + getrennte SSH-Key-Architektur (Build/Produktiv) | [`docs/authentication.md`](docs/authentication.md) |
+
+[↑ Nach oben](#-inhaltsverzeichnis)
 
 ---
 
@@ -158,6 +166,10 @@ Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
 
 Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstanten hinterlegt (z. B. `MIN_DISK_SIZE_GB` in `ProxmoxDiskMemorySet.py`) und bei Bedarf dort anpassbar.
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
+---
+
 ## 🩹 Fehlerbehebung
 
 | Symptom | Ursache | Lösung |
@@ -172,6 +184,8 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 | Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check | Ohne `--check`-Filter testen |
 | Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder falscher `--external-checks-dir`-Pfad | Ordnerstruktur prüfen; direkter `importlib`-Test macht den Fehler sichtbar |
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
 ---
 
 ## ⚠️ Bekannte technische Schuld (offen)
@@ -179,6 +193,8 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 Transparent dokumentiert statt verschwiegen, analog zum `checkov:skip`-Prinzip:
 
 **Ports 80/443 im Golden Image gelten für jede geklonte VM, unabhängig von der Rolle.** Der Packer-Provisioner öffnet UFW-Ports 22/80/443 einmalig im Template (Phase 2B). Für den DB-Server sind das zwei unnötig offene Ports (Verstoß gegen minimale Angriffsfläche) – noch keine Entscheidung getroffen, ob die Ports generell aus dem Template entfernt werden oder rollenspezifische VMs sie aktiv wieder schließen. Details: [`docs/cis-hardening.md`](docs/cis-hardening.md).
+
+[↑ Nach oben](#-inhaltsverzeichnis)
 
 ---
 
@@ -195,6 +211,8 @@ Nach Abschluss der Phasen 2A–2C folgen weitere, aufeinander aufbauende Ausbaus
 
 Die vollständige Begründung der Phasenreihenfolge (warum diese Reihenfolge und nicht anders) steht in `00_projekt_ziel_und_lernpfad.md`.
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
 ---
 
 ## 🚀 Zukunftsausblick: AI-Driven SIEM & Monitoring
@@ -205,3 +223,5 @@ Nach dem erfolgreichen Abschluss der IaC-Phasen wird das Framework um eine autom
 - **Data Pipeline:** Automatisierter Versand von System- und Netzwerktracks (via Promtail/Beats) an das zentrale SIEM
 - **AI-Driven Analytics:** Eigenständige Python-Pipeline (**Pandas**) zur Anomalie-Erkennung in Log-Strukturen
 - **Automated Reporting:** LLM-gestützte Kontext-Evaluierung von Sicherheitsvorfällen, Generierung von *Executive Security Compliance Reports*
+
+[↑ Nach oben](#-inhaltsverzeichnis)
