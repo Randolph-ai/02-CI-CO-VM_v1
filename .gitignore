@@ -1,5 +1,5 @@
 # Terraform - Secrets & State
-terraform/terraform.tfvars
+terraform/secrets.auto.tfvars
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform/
