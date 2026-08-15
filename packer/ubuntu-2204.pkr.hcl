@@ -112,7 +112,6 @@ source "proxmox-clone" "ubuntu" {
   #        vm_name und template_name müssen übereinstimmen
   #        template_description = Info für Proxmox-Admin
 
-  vm_id                = 2000
   vm_name              = "ubuntu-2204-golden"
   template_name        = "ubuntu-2204-golden"
   template_description = "Ubuntu 22.04 Golden Image - gebaut von Packer aus Cloud-Image-Basis (VM 9000)"
@@ -340,6 +339,12 @@ build {
       "sudo rm -f /etc/machine-id",
       "sudo touch /etc/machine-id",
       "sudo userdel -f -r randolph" # ← jetzt als letzter Befehl im gesamten Block
+      
     ]
+  }
+  # NEU: hier einfügen, nach dem provisioner-Block, noch innerhalb der
+  # schließenden Klammer von "build"
+  post-processor "manifest" {
+    output = "manifest.json"
   }
 }

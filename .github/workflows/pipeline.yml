@@ -71,6 +71,8 @@ jobs:
     # Läuft auf einem selbst-gehosteten Runner in deinem Proxmox-Netzwerk
     # Dadurch kann der Runner direkt auf Proxmox zugreifen
     runs-on: [self-hosted, proxmox]
+    outputs:
+      new_template_id: ${{ steps.get-template-id.outputs.template_id }}  # ID des erstellten Templates
 
     steps:
       # ---------------------------------------------------------------
@@ -113,19 +115,9 @@ jobs:
           PACKER_TOKEN_ID: ${{ secrets.PACKER_TOKEN_ID }}
           PACKER_TOKEN_SECRET: ${{ secrets.PACKER_TOKEN_SECRET }}
 
-      # ---------------------------------------------------------------
-      # Schritt 5: Alte Template-VM entfernen
-      # ---------------------------------------------------------------
-      # Löscht eine eventuell vorhandene alte Template-VM mit ID 2000
-      # Verhindert Konflikte beim Erstellen des neuen Templates
-      - name: Alte Template-VM entfernen (falls vorhanden)
-        run: |
-          # SSH zu Proxmox-Host und VM löschen (|| true = Fehler ignorieren falls VM nicht existiert)
-          ssh -o StrictHostKeyChecking=no root@10.0.30.22 \
-            "qm destroy 2000 || true"     
             
       # ---------------------------------------------------------------
-      # Schritt 6: Packer-Template bauen
+      # Schritt 5: Packer-Template bauen
       # ---------------------------------------------------------------
       # Jetzt wird das Template wirklich erstellt
       # Packer: 
@@ -141,7 +133,31 @@ jobs:
           PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
           PACKER_TOKEN_ID: ${{ secrets.PACKER_TOKEN_ID }}
           PACKER_TOKEN_SECRET: ${{ secrets.PACKER_TOKEN_SECRET }}
+          
+      # ---------------------------------------------------------------
+      # Schritt 6: Vergebene Template-ID auslesen
+      # ---------------------------------------------------------------
+      # ---- NEUE VARIANTE (aktiv) ----
+      # Extraktion direkt aus Packer-manifest.json
+      #    │
+      #    └── Wechsel ins packer-Verzeichnis
+      #        → jq -r '.builds[-1].artifact_id' manifest.json
+      #            Extrahiert die artifact_id des letzten Builds
+      #            (der aktuelle Packer-Build ist immer der letzte Eintrag)
+      #        → cut -d: -f2
+      #            Trennt an ":" und nimmt den zweiten Teil
+      #            Beispiel: "local:123" → "123"
+      #        → Keine Netzwerkabhängigkeit mehr → schneller und stabiler
+      #        → Funktioniert in jeder Umgebung (lokal, CI/CD, etc.)
+      #        → WICHTIG: Der Schritt muss NACH dem Packer-Build ausgeführt werden
 
+      - name: Vergebene Template-ID auslesen
+        id: get-template-id
+        run: |
+          cd packer
+          TEMPLATE_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d: -f2)
+          echo "Gefundene Template-ID: $TEMPLATE_ID"
+          echo "template_id=$TEMPLATE_ID" >> "$GITHUB_OUTPUT"
 
   # =================================================================
   # JOB 2: SECURITY-GATE MIT CHECKOV
