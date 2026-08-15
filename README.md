@@ -28,7 +28,7 @@
 
 ## 🎯 Projektübersicht
 
-![Proxmox CI/CD Pipeline](docs/images/pipeline-diagramm.png)
+![Proxmox CI/CD Pipeline](docs/images/pipeline_diagramm_mit_server.png)
 
 Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Infrastruktur auf Proxmox VE mittels Infrastructure-as-Code (IaC). Ein hartes Security-Gate (Terraform-Seite) sowie ein ergänzendes Soft-Gate (Ansible-Seite) verhindern bzw. dokumentieren fehlerhafte Deployments.
 
@@ -120,7 +120,7 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 - Self-hosted GitHub Actions Runner, registriert mit den Labels `self-hosted` **und** `proxmox` (ohne exaktes Label-Match hängt der Job endlos in der Warteschlange, ohne Fehlermeldung)
 - Auf dem Runner installiert: Packer, Terraform, Ansible, Checkov (>= 3.3.6)
 - GitHub Secrets gesetzt:
-  - `PROXMOX_URL`, `PROXMOX_USER`, `PROXMOX_PASSWORD` (für Packer)
+  - `PROXMOX_URL`, `PACKER_TOKEN_ID`, `PACKER_TOKEN_SECRET` (für Packer, API-Token-Auth)
   - `TF_VAR_*`-Secrets passend zu den in `variables.tf` deklarierten Variablen
   - `SSH_PRIVATE_KEY` (dauerhafter Produktiv-Key, User `ansible` – siehe [`docs/authentication.md`](docs/authentication.md))
   - `SSH_PUBLIC_KEY` (öffentlicher Gegenpart, als `TF_VAR_ssh_public_key` an Terraform übergeben)
@@ -135,7 +135,9 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
    ./packer/setup-base-image.sh
    ```
    Erstellt die Cloud-Image-Basis-VM (Standard: ID `9000`), inkl. Disk-Vergrößerung und Guest-Agent-Flag.
-3. `terraform/terraform.tfvars` aus `terraform/terraform.tfvars.example` erstellen und mit den eigenen Werten befüllen (Netzwerk, IPs für Web- und DB-Server, Disk-Größe, `template_vm_id`)
+3. Zwei Terraform-Variablen-Dateien anlegen:
+   - `terraform/terraform.tfvars` (unkritische Werte: Netzwerk, IPs, Disk-Größe, `template_vm_id`) aus `terraform.tfvars.example`
+   - `terraform/secrets.auto.tfvars` (nur die drei Proxmox-Auth-Werte: `pm_api_url`, `pm_api_token_id`, `pm_api_token_secret`) – wird von Terraform automatisch geladen, `.gitignore`-geschützt
 4. GitHub Secrets im Repo hinterlegen (siehe Voraussetzungen)
 5. Self-hosted Runner registrieren und mit dem Label `proxmox` versehen
 6. Push auf `main` (oder Pull Request) startet die Pipeline automatisch
@@ -159,7 +161,7 @@ Nach einem erfolgreichen Lauf sind beide VMs über ihre von Terraform ausgegeben
 ## 🔩 Konfiguration
 
 Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
-- `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird
+- `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird (aktuell noch fest hinterlegt; Packer vergibt die Build-ID seit Phase 2B.2 automatisch, die Verbindung zur Terraform-Variable ist noch nicht angeschlossen – siehe Roadmap)
 - `web_server_ip`, `db_server_ip`, `network_gateway` – Netzwerkkonfiguration der VMs
 - `web_server_disk_size`, `db_server_disk_size` – Ziel-Diskgröße (muss `>= 40` sein, sonst blockiert `CKV_PROXMOX_3`)
 - `db_server_cores`, `db_server_memory` – Ressourcengröße des DB-Servers
@@ -176,7 +178,6 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 |---|---|---|
 | Job hängt endlos in "Queued" | Runner-Label passt nicht zu `runs-on` in `pipeline.yml` | Label `proxmox` beim Runner ergänzen |
 | `E: Could not get lock /var/lib/apt/lists/lock` im Packer-Build | Cloud-Init läuft beim ersten Boot noch, blockiert `apt`-Lock | `sudo cloud-init status --wait` als erste Zeile im `shell`-Provisioner |
-| `config file already exists` beim Packer-Build | Template-VM-ID existiert in Proxmox bereits | Cleanup-Step (`qm destroy <id> \|\| true`) vor dem Build, bereits in `pipeline.yml` integriert |
 | `config file already exists` beim Terraform-`apply`, obwohl Plan `X to add` zeigt | State-Drift: lokal getesteter State kennt eine VM, die im Runner-eigenen State nicht existiert | Betroffene VM einmalig löschen (`qm destroy <id>`), Pipeline im Runner-Kontext neu bauen lassen. Strukturelle Lösung: zentrales State-Backend (Phase 3) |
 | Terraform will VM erneut anlegen, obwohl sie läuft | `terraform.tfstate` ging beim Checkout verloren (self-hosted Runner mit geteiltem Arbeitsordner) | `clean: false` bei **allen** `actions/checkout`-Schritten setzen |
 | Dienst von einer anderen VM aus nicht erreichbar (`Connection refused`), obwohl Firewall-Regel korrekt ist | Dienst lauscht per Default nur auf `localhost` | Netzwerk-Lauschen (z. B. `listen_addresses` bei PostgreSQL) anpassen, siehe [`docs/db-server-architecture.md`](docs/db-server-architecture.md) |
