@@ -97,7 +97,7 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   #        VM-ID aus terraform.tfvars (z.B. 9000)
 
   clone {
-    vm_id = var.template_vm_id
+    vm_id = var.template_vm_id # Eingang von welchem Template die VM geklont wird
   }
 
   # ---- CPU ----
@@ -189,11 +189,11 @@ resource "proxmox_virtual_environment_vm" "web_server" {
   }
 }
 
-# ************************************************************
-# RESOURCE: proxmox_virtual_environment_vm.db_server 
+# ============================================================
+# PROXMOX VM RESSOURCE - DATENBANK -SERVER
 # Erstellt am : 2026-08-02
 # Letzter Edit: 2026-08-11
-# ************************************************************
+# ============================================================
 # ZWECK:   Definiert eine Proxmox-VM für den Datenbank-Server (PostgreSQL)
 #          Die VM wird aus einem Template geklont und per Cloud-Init initialisiert.
 #          Alle Hardware-Parameter (CPU, RAM, Festplatte) sowie Netzwerk und
@@ -208,8 +208,8 @@ resource "proxmox_virtual_environment_vm" "web_server" {
 #            muss zum definierten Subnetz passen.
 # ============================================================
 
-
 resource "proxmox_virtual_environment_vm" "db_server" {
+  
   # ==========================================
   #  GRUNDEINSTELLUNGEN
   # ==========================================
@@ -426,3 +426,209 @@ resource "proxmox_virtual_environment_vm" "db_server" {
   } # Ende initialization
 
 } # Ende resource
+
+# ============================================================
+# RESOURCE: proxmox_virtual_environment_vm.test_vm
+# ************************************************************
+# ZWECK: Wegwerf-Test-VM für Phase 2B.2 (Test-vor-Promotion)
+#        Wird aus dem frisch gebauten, noch ungetesteten Template
+#        geklont, dient nur der automatisierten Qualitätskontrolle.
+#
+# ERSTELLT:         2026-08-16
+# LETZTE ÄNDERUNG:  2026-08-16
+# VON:              Infrastructure Team
+#
+# WICHTIG: Diese VM ist NUR für Testzwecke gedacht!
+#          - Sie wird automatisiert erstellt, getestet und wieder gelöscht
+#          - Keine dauerhaften Daten oder Konfigurationen speichern
+#          - DHCP verwendet (keine statische IP, um Konflikte zu vermeiden)
+#          - Die VM dient als Qualitätsgate: Nur bei erfolgreichem Test
+#            wird das Template für Produktion freigegeben
+# ============================================================
+
+resource "proxmox_virtual_environment_vm" "test_vm" {
+  # ---- GRUNDEINSTELLUNGEN ----
+  # Name, Beschreibung und Tags für die Test-VM
+  #    │
+  #    └── "test-vm-temp" = Deutlicher Hinweis auf temporären Charakter
+  #        description = Erklärt den Zweck für andere Admins
+  #        tags = ["test", "temporary"] → Erleichtert das Auffinden und spätere Löschen
+
+  name        = "test-vm-temp"
+  description = "Wegwerf-Test-VM - Phase 2B.2 Qualitätskontrolle"
+  tags        = ["test", "temporary"]
+
+  # ---- PROXMOX NODE ----
+  # Auf welchem Proxmox-Host wird die VM erstellt?
+  #    │
+  #    └── Gleicher Node wie Produktions-VMs für realistische Testbedingungen
+
+  node_name = var.target_node
+
+  # ---- VM-ID ----
+  # Keine feste vm_id! Proxmox vergibt automatisch eine freie ID
+  #    │
+  #    └── Grund: Analog zur Template-Logik vom 15.08.
+  #        → Vermeidet Kollisionen bei parallelen Testläufen
+  #        → Keine manuelle Verwaltung von Test-VM-IDs nötig
+  #        → Wichtig: Die ID wird für nachfolgende Schritte benötigt
+  #          (z.B. zum Löschen oder für Test-Ausgaben)
+
+  # ---- AUTOSTART & START-STEUERUNG ----
+  # Steuerung des Startverhaltens
+  #    │
+  #    └── on_boot = false → VM startet nicht automatisch beim Host-Boot
+  #        started = true  → VM wird sofort nach Erstellung gestartet
+  #        → Warum started = true? Der QEMU-Guest-Agent benötigt eine
+  #          laufende VM, um die IP-Adresse zu melden. Ohne diese Info
+  #          kann Terraform die IP nicht auslesen und Tests schlagen fehl.
+
+  on_boot = false
+  started = true          # Pflicht: Guest-Agent braucht laufende VM für IP-Meldung
+
+  # ---- QEMU GUEST AGENT ----
+  # Aktiviert den QEMU-Gast-Agent
+  #    │
+  #    └── PFICHT für die IP-Abfrage und für Tests!
+  #        → Ohne Agent kann Terraform die IP nicht auslesen
+  #        → Test-Scripts können keine Verbindung zur VM herstellen
+  #        → Daher: zwingend enabled = true
+
+  agent {
+    enabled = true
+  }
+
+  # ---- TIMEOUT CLONE ----
+  # Maximale Wartezeit beim Klonen der Vorlage (in Sekunden)
+  #    │
+  #    └── 600 Sekunden = 10 Minuten
+  #        → Auch Test-VMs können groß sein (abh. vom Template)
+  #        → Verhindert Timeout-Fehler in der CI/CD-Pipeline
+
+  timeout_clone = 600
+
+  # ---- TEMPLATE KLONEN ----
+  # Welches Template wird als Basis verwendet?
+  #    │
+  #    └── var.test_template_id = ID des frisch gebauten Templates
+  #        → Das ist das Template, das in Phase 2B.1 gebaut wurde
+  #        → Es wird hier getestet, bevor es für Produktion freigegeben wird
+  #        → Wichtige Entscheidung: Das Template wird NUR getestet
+  #          wenn dieser Klon erfolgreich alle Tests durchläuft
+
+  clone {
+    vm_id = var.test_template_id    # Template-ID der Wegwerf-Test-VM
+  }
+
+  # ---- CPU ----
+  # Prozessor-Konfiguration für die Test-VM
+  #    │
+  #    └── cores = var.web_server_cores → vorerst wiederverwendet
+  #        → Grund: Einfache Implementierung, geringerer Wartungsaufwand
+  #        → Ggf. später eigene Variable: var.test_vm_cores
+  #        → type = "host" → Beste Performance für Tests
+
+  cpu {
+    cores = var.web_server_cores    # vorerst wiederverwendet, ggf. eigene Variable später
+    type  = "host"
+  }
+
+  # ---- RAM ----
+  # Arbeitsspeicher-Konfiguration für die Test-VM
+  #    │
+  #    └── dedicated = var.web_server_memory → Wiederverwendung der Web-VM-Werte
+  #        → Test-VM sollte ähnliche Ressourcen haben wie Produktion
+  #        → Sonst sind Testergebnisse nicht aussagekräftig
+  #        → Ggf. später eigene Variable
+
+  memory {
+    dedicated = var.web_server_memory
+  }
+
+  # ---- NETZWERK ----
+  # Netzwerk-Interface der Test-VM
+  #    │
+  #    └── bridge = var.network_bridge → Gleicher virtueller Switch
+  #        vlan_id = var.network_vlan_id → Gleiches VLAN
+  #        → Grund: Test-VM sollte im gleichen Netzwerk sein wie die
+  #          späteren Produktions-VMs für realistische Tests
+  #        → Aber: DHCP statt statischer IP (s.u.) um Konflikte zu vermeiden
+
+  network_device {
+    bridge  = var.network_bridge
+    vlan_id = var.network_vlan_id
+  }
+
+  # ---- FESTPLATTE ----
+  # Speicher-Konfiguration für die Test-VM
+  #    │
+  #    └── datastore_id = var.disk_datastore → Gleicher Speicherort
+  #        interface = "scsi0" → SCSI-Controller für Performance
+  #        size = var.web_server_disk_size → Wiederverwendung der Web-VM-Größe
+  #        → Test-VM sollte gleiche Speichergröße haben wie Produktion
+  #        → Sonst können Tests (z.B. Disk-Space) nicht repräsentativ sein
+
+  disk {
+    datastore_id = var.disk_datastore
+    interface    = "scsi0"
+    size         = var.web_server_disk_size
+  }
+
+  # ---- CLOUD-INIT ----
+  # Automatische Konfiguration beim ersten Start
+  #    │
+  #    └── Hier wird die Test-VM initialisiert
+  #        → Wichtig: Die gleiche Konfiguration wie Produktion?
+  #        → Für Tests: So nah wie möglich am Produktionssetup
+
+  initialization {
+    # ---- DNS ----
+    # Nameserver für die Test-VM
+    #    │
+    #    └── Gleiche DNS-Server wie Produktion
+    #        → Sonst können Tests (DNS-Auflösung) fehlschlagen
+
+    dns {
+      servers = ["8.8.8.8", "1.1.1.1"]
+    }
+
+    # ---- IP-KONFIGURATION ----
+    # Wichtige Abweichung zur Produktion!
+    #    │
+    #    └── address = "dhcp" → KEINE statische IP!
+    #        → Warum DHCP? Vermeidet IP-Konflikte mit Produktion
+    #        → Test-VM wird nur kurzzeitig benötigt → DHCP reicht
+    #        → Keine manuelle IP-Planung für Tests nötig
+    #        → Die IP wird vom Guest-Agent ausgelesen für Tests
+    #        → Nachteil: IP kann sich ändern (unwichtig für Wegwerf-VM)
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"     # keine feste IP - DHCP übernimmt
+      }
+    }
+
+    # ---- BENUTZERKONTO ----
+    # Anlegen eines Benutzers für SSH-Zugriff (Tests)
+    #    │
+    #    └── username = "ansible" → Gleicher User wie Produktion
+    #        keys = [trimspace(var.ssh_public_key)] → Gleicher SSH-Key
+    #        → Grund: Test-Scripts sollen gleichen Zugang haben wie Produktion
+    #        → Erleichtert die automatisierte Testdurchführung
+    #        → Wichtig: Der User/Key muss für die Test-Scripts verfügbar sein
+
+    user_account {
+      username = "ansible"
+      keys     = [trimspace(var.ssh_public_key)]
+    }
+  }
+}
+
+# ============================================================
+# NACH DEM TEST (Phase 2B.3):
+#   Diese VM wird automatisch wieder gelöscht!
+#   - Sie ist NUR für den Test-Zeitraum gedacht
+#   - Keine manuelle Bereinigung nötig
+#   - Bei Fehlern: VM bleibt als "test-vm-temp" sichtbar
+#   - Manuelles Löschen: qm destroy <VM-ID> (nach Rücksprache)
+# ============================================================
