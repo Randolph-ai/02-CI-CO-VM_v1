@@ -124,3 +124,17 @@ output "db_server_vm_id" {
   value       = proxmox_virtual_environment_vm.db_server.vm_id
   description = "VM-ID des DB-Servers in Proxmox"
 }
+
+
+# ============================================================
+# OUTPUT: TEST_VM_IP
+# ZWECK: IP-Adresse der Wegwerf-Test-VM, für die SSH-Warteschleife
+#        und den Ansible-Testlauf in Phase 2B.2 benötigt.
+# ============================================================
+output "test_vm_ip" {
+  value = try(
+    proxmox_virtual_environment_vm.test_vm.ipv4_addresses[1][0],
+    "IP noch nicht verfügbar - qemu-guest-agent startet noch"
+  )
+  description = "IP-Adresse der Wegwerf-Test-VM (Phase 2B.2)"
+}

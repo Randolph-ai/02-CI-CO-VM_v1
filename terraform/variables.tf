@@ -179,3 +179,12 @@ variable "db_server_ip" {
   type        = string
   default     = "10.0.30.102/24"
 }
+
+# ============================================================
+# 6. WEGWERF-TEST-VM (Phase 2B.2 - Test-vor-Promotion)
+# ============================================================
+
+variable "test_template_id" {
+  description = "VM-ID des frisch gebauten, noch ungetesteten Templates (aus Job 1, new_template_id-Output)"
+  type        = number
+}

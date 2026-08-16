@@ -218,6 +218,8 @@ jobs:
     outputs:
       vm_ip: ${{ steps.get-ip.outputs.vm_ip }}          # Web-Server IP
       db_vm_ip: ${{ steps.get-ip.outputs.db_vm_ip }}    # DB-Server IP
+      test_vm_ip: ${{ steps.get-ip.outputs.test_vm_ip }} # Wegwerf-Test-VM IP (Phase 2B.2)
+      
 
     steps:
       # ---------------------------------------------------------------
@@ -249,6 +251,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
 
       # ---------------------------------------------------------------
       # Schritt 4: Terraform Plan anzeigen
@@ -264,6 +267,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
 
       # ---------------------------------------------------------------
       # Schritt 5: VM deployen
@@ -279,7 +283,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
       # ---------------------------------------------------------------
       # Schritt 6: VM IP-Adressen auslesen
       # ---------------------------------------------------------------
@@ -294,6 +298,7 @@ jobs:
           # 2>/dev/null unterdrückt Fehlermeldungen falls Output nicht existiert
           VM_IP=$(terraform output -raw vm_ip 2>/dev/null)
           DB_VM_IP=$(terraform output -raw db_server_ip 2>/dev/null)
+          TEST_VM_IP=$(terraform output -raw test_vm_ip 2>/dev/null)
 
           # ============================================================
           # SICHERHEITSCHECK: Prüfung ob IPs vorhanden sind
@@ -315,6 +320,7 @@ jobs:
           # Dadurch werden sie an nachfolgende Jobs weitergegeben
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
           echo "db_vm_ip=$DB_VM_IP" >> $GITHUB_OUTPUT
+          echo "test_vm_ip=$TEST_VM_IP" >> $GITHUB_OUTPUT
 
 
   # =================================================================
