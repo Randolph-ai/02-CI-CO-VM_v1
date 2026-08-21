@@ -412,6 +412,7 @@ jobs:
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}          # Web-Server IP
           DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}    # DB-Server IP
+          TEST_VM_IP: ${{ needs.deploy-vm.outputs.test_vm_ip }}  # Test-VM IP
         run: |
           # ============================================================
           # WEB-SERVER ERREICHBARKEIT PRÜFEN
@@ -463,6 +464,31 @@ jobs:
             exit 1
           fi
 
+
+          # ============================================================
+          # TEST-VM ERREICHBARKEIT PRÜFEN
+          # ============================================================
+          echo "Warte auf Test-VM: $TEST_VM_IP"
+
+          TEST_SSH_OK=false
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=5 \
+                   -i ~/.ssh/gh_actions_deploy_key \
+                   ansible@$TEST_VM_IP 'echo ok' 2>/dev/null; then
+              echo "✅ Test-VM ist erreichbar!"
+              TEST_SSH_OK=true
+              break
+            fi
+            echo "Versuch $i/30 - warte 10 Sekunden..."
+            sleep 10
+          done
+
+          if [ "$TEST_SSH_OK" = false ]; then
+            echo "❌ FEHLER: Test-VM nach 30 Versuchen nicht erreichbar!"
+            exit 1
+          fi
+
       # ---------------------------------------------------------------
       # Schritt 5: SSH-Fingerabdruck speichern
       # ---------------------------------------------------------------
@@ -472,6 +498,7 @@ jobs:
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
           DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}
+          TEST_VM_IP: ${{ needs.deploy-vm.outputs.test_vm_ip }}  # Test-VM IP
         run: |
           ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts      # Web-Server
           ssh-keyscan -H "$DB_VM_IP" >> ~/.ssh/known_hosts   # DB-Server
