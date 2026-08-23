@@ -10,7 +10,7 @@
 #   5️ Ansible konfiguriert Nginx-Webserver auf der VM
 #
 #  Erstellt am:       2026-06-27
-#  Letzte Änderung am:2026-08-09 
+#  Letzte Änderung am:2026-08-23 
 #  Autor:          Randolph Bluming
 #  Repository:     GitHub Actions (self-hosted Runner)
 #  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
@@ -47,6 +47,11 @@ on:
       - 'ansible/**'
       - '.github/workflows/pipeline.yml'
 
+  # Manueller Start über die GitHub-Actions-Oberfläche
+  # Ermöglicht kontrolliertes Testen auf einem Feature-Branch,
+  # ohne PR/Push auf main auszulösen
+  workflow_dispatch:
+    
 # ===================================================================
 # SICHERHEITSBERECHTIGUNGEN
 # ===================================================================
@@ -305,17 +310,19 @@ jobs:
           # ============================================================
           # Falls keine IP gefunden wurde → Pipeline abbrechen
           # Verhindert dass mit falschen/leeren IPs weitergearbeitet wird
-          if [ -z "$VM_IP" ] || [ -z "$DB_VM_IP" ]; then
-            echo "❌ FEHLER: Eine oder beide IPs fehlen!"
+          if [ -z "$VM_IP" ] || [ -z "$DB_VM_IP" ] || [ -z "$TEST_VM_IP" ]; then
+            echo "❌ FEHLER: Eine oder mehrere IPs fehlen!"
             echo "  vm_ip: '$VM_IP'"
             echo "  db_server_ip: '$DB_VM_IP'"
+            echo "  test_vm_ip: '$TEST_VM_IP'"
             echo "Prüfe ob outputs.tf korrekt konfiguriert ist."
             exit 1
           fi
 
           echo "✅ VM IP gefunden: $VM_IP"
           echo "✅ DB-Server IP gefunden: $DB_VM_IP"
-
+          echo "✅ Test-VM IP gefunden: $TEST_VM_IP"
+          
           # IPs in GitHub-Actions-Output schreiben
           # Dadurch werden sie an nachfolgende Jobs weitergegeben
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
@@ -412,56 +419,45 @@ jobs:
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}          # Web-Server IP
           DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}    # DB-Server IP
+          TEST_VM_IP: ${{ needs.deploy-vm.outputs.test_vm_ip }}  # Test-VM IP
         run: |
-          # ============================================================
-          # WEB-SERVER ERREICHBARKEIT PRÜFEN
-          # ============================================================
-          echo "Warte auf Web-Server: $VM_IP"
-
-          SSH_OK=false
-          for i in {1..30}; do  # Maximal 30 Versuche
-            # SSH-Verbindung testen mit 'echo ok'
-            if ssh -o StrictHostKeyChecking=no \
-                   -o ConnectTimeout=5 \
-                   -i ~/.ssh/gh_actions_deploy_key \
-                   ansible@$VM_IP 'echo ok' 2>/dev/null; then
-              echo "✅ Web-Server ist erreichbar!"
-              SSH_OK=true
-              break
+          declare -A SERVERS=(
+          ["webserver"]="$VM_IP"
+          ["dbserver"]="$DB_VM_IP"
+          ["testserver"]="$TEST_VM_IP"
+          )
+            # für den aktuellen Server-Namen aus dem Array
+            for NAME in "${!SERVERS[@]}"; do
+            IP="${SERVERS[$NAME]}"
+        
+            echo "Warte auf $NAME: $IP"
+        
+            SSH_OK=false  # KEIN $ bei Zuweisung!
+            for i in {1..30}; do
+                # -o StrictHostKeyChecking=no \
+                # Akzeptiert automatisch den SSH-Host-Key 
+                # (fragt nicht nach Bestätigung)
+                # -i ~/.ssh/gh_actions_deploy_key \
+                # Benutzt diesen privaten SSH-Key zur Authentifizierung
+                # 'echo ok' = Führt auf dem Server den Befehl echo ok aus 
+                # (Test, ob SSH funktioniert)
+                if ssh -o StrictHostKeyChecking=no \
+                       -o ConnectTimeout=5 \
+                       -i ~/.ssh/gh_actions_deploy_key \
+                       ansible@$IP 'echo ok' 2>/dev/null ; then
+                    echo "✅ $NAME ist erreichbar!"
+                    SSH_OK=true  # KEIN $ bei Zuweisung!
+                    break
+                fi
+                echo "Versuch $i/30 - warte 10 Sekunden..."
+                sleep 10
+            done
+        
+            if [ "$SSH_OK" = false ]; then  # $ beim LESEN des Werts!
+                echo "❌ FEHLER: $NAME nach 30 Versuchen nicht erreichbar!"
+                exit 1
             fi
-            echo "Versuch $i/30 - warte 10 Sekunden..."
-            sleep 10
-          done
-
-          # Falls nach 30 Versuchen keine Verbindung → Pipeline abbrechen
-          if [ "$SSH_OK" = false ]; then
-            echo "❌ FEHLER: Web-Server nach 30 Versuchen nicht erreichbar!"
-            exit 1
-          fi
-
-          # ============================================================
-          # DB-SERVER ERREICHBARKEIT PRÜFEN
-          # ============================================================
-          echo "Warte auf DB-Server: $DB_VM_IP"
-
-          DB_SSH_OK=false
-          for i in {1..30}; do
-            if ssh -o StrictHostKeyChecking=no \
-                   -o ConnectTimeout=5 \
-                   -i ~/.ssh/gh_actions_deploy_key \
-                   ansible@$DB_VM_IP 'echo ok' 2>/dev/null; then
-              echo "✅ DB-Server ist erreichbar!"
-              DB_SSH_OK=true
-              break
-            fi
-            echo "Versuch $i/30 - warte 10 Sekunden..."
-            sleep 10
-          done
-
-          if [ "$DB_SSH_OK" = false ]; then
-            echo "❌ FEHLER: DB-Server nach 30 Versuchen nicht erreichbar!"
-            exit 1
-          fi
+            done
 
       # ---------------------------------------------------------------
       # Schritt 5: SSH-Fingerabdruck speichern
@@ -472,9 +468,18 @@ jobs:
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
           DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}
+          TEST_VM_IP: ${{ needs.deploy-vm.outputs.test_vm_ip }}  # Test-VM IP
         run: |
-          ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts      # Web-Server
-          ssh-keyscan -H "$DB_VM_IP" >> ~/.ssh/known_hosts   # DB-Server
+          declare -A SERVERS=(
+          ["webserver"]="$VM_IP"
+          ["dbserver"]="$DB_VM_IP"
+          ["testserver"]="$TEST_VM_IP"
+          )
+
+          for NAME in "${!SERVERS[@]}"; do
+          IP="${SERVERS[$NAME]}"
+          ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 
+          done
 
       # ---------------------------------------------------------------
       # Schritt 6: Ansible Playbook ausführen
@@ -485,22 +490,30 @@ jobs:
         env:
           VM_IP: ${{ needs.deploy-vm.outputs.vm_ip }}
           DB_VM_IP: ${{ needs.deploy-vm.outputs.db_vm_ip }}
+          TEST_VM_IP: ${{ needs.deploy-vm.outputs.test_vm_ip }}
           ANSIBLE_HOST_KEY_CHECKING: "False"  # Deaktiviert Host-Key-Checking (wird von ssh-keyscan übernommen)
         run: |
           cd ansible
-
-          # ============================================================
-          # DYNAMISCHES INVENTORY ERSTELLEN
-          # ============================================================
           # Erstellt eine inventory.ini mit den aktuellen IP-Adressen
           # Wird bei jedem Pipeline-Run neu geschrieben
-          cat > inventory.ini << EOF
-          [webserver]
-          $VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+          declare -A SERVERS=(
+           ["webserver"]="$VM_IP"
+           ["dbserver"]="$DB_VM_IP"
+           ["testserver"]="$TEST_VM_IP"
+            )
 
-          [dbserver]
-          $DB_VM_IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+          > inventory.ini   # Datei leeren/anlegen für diesen Lauf
 
+          for NAME in "${!SERVERS[@]}"; do
+           IP="${SERVERS[$NAME]}"
+           cat >> inventory.ini << EOF
+          [$NAME]
+          $IP ansible_user=ansible ansible_ssh_private_key_file=~/.ssh/gh_actions_deploy_key
+
+          EOF
+          done
+
+          cat >> inventory.ini << EOF
           [all:vars]
           ansible_python_interpreter=/usr/bin/python3
           EOF
