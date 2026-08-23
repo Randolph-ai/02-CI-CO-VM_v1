@@ -47,6 +47,11 @@ on:
       - 'ansible/**'
       - '.github/workflows/pipeline.yml'
 
+  # Manueller Start über die GitHub-Actions-Oberfläche
+  # Ermöglicht kontrolliertes Testen auf einem Feature-Branch,
+  # ohne PR/Push auf main auszulösen
+  workflow_dispatch:
+    
 # ===================================================================
 # SICHERHEITSBERECHTIGUNGEN
 # ===================================================================
