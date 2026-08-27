@@ -3,10 +3,11 @@
 # ============================================================
 # Autor:           Randolph Bluming
 # Erstellt am:     2026-06-29
-# Letzte Änderung: 2026-08-02
+# Letzte Änderung: 2026-08-27
 # Funktion:        Vollständige Konfiguration von Web- und DB-Server
 # Ziel-VMs:        web-server-prod (10.0.30.101)
 #                  db-server-prod  (10.0.30.102)
+#                  test-vm (dynamische IP, siehe Phase 2B.2)
 # Wird aufgerufen: GitHub Actions Pipeline (Job 5: configure-vm)
 # ============================================================
 #
@@ -27,6 +28,11 @@
 #     5. PostgreSQL starten & für Autostart aktivieren
 #     6. Prüfen ob PostgreSQL antwortet
 #
+#   PLAY 3 - Test-VM (Stichprobenprüfung, Phase 2B.2):
+#     1. SSH-Passwort-Login-Check (CIS-Härtung verifizieren)
+#     2. Security-Updates-Config-Check (Inhalt der Origin-Datei)
+#     3. Ergebnis ausgeben
+#
 # IDEMPOTENZ-PRINZIP:
 #   Dieses Playbook kann beliebig oft ausgeführt werden.
 #   Ansible prüft vor jedem Task ob die Aktion nötig ist.
@@ -43,41 +49,18 @@
 #   - VMs müssen laufen und SSH erreichbar sein
 #   - SSH-Key muss in GitHub Secrets hinterlegt sein
 #   - Python3 muss auf den VMs installiert sein
-# ============================================================
 
-# ============================================================
-# PLAY-DEFINITION
-# ============================================================
-# Verbindet eine Server-Gruppe mit Tasks. Hier: alle Server
-# aus Gruppe "webserver" in inventory.ini.
-# ============================================================
-# ============================================================
-# PLAY 1: WEB-SERVER KONFIGURATION
-# ============================================================
-# ZWECK:   Installiert und konfiguriert Nginx auf dem Web-Server.
-#          Erstellt eine dynamische index.html mit Hostname und IP.
-#          Aktiviert die Firewall und gibt SSH/HTTP frei.
-#
-# BETRIFFT: Nur Gruppe "webserver" aus inventory.ini
-# ============================================================
+
+# =================================================================
+# ============================== PLAY 1: WEB-SERVER ===============
+# =================================================================
 - name: Basis-Setup Web-Server
   hosts: webserver
   become: true
 
   tasks:
-
     # ==========================================================
     # TASK 1: PAKETLISTEN AKTUALISIEREN
-    # ==========================================================
-    # ZWECK:   Aktualisiert den apt-Cache, damit nachfolgende
-    #          Installationen die neuesten Pakete finden.
-    #
-    # WICHTIG: Kein "upgrade: dist" – das würde in der Pipeline
-    #          unkontrolliert alle Pakete aktualisieren und könnte
-    #          unerwartete Änderungen verursachen.
-    #          Wir wollen NUR den Cache aktualisieren.
-    #
-    # cache_valid_time: 3600 → 1 Stunde gültig, spart Zeit
     # ==========================================================
     - name: Paketlisten aktualisieren
       apt:
@@ -87,11 +70,6 @@
     # ==========================================================
     # TASK 2: NGINX INSTALLIEREN
     # ==========================================================
-    # ZWECK:   Installiert Nginx aus den Ubuntu-Repositories.
-    #
-    # state: present → installiert, aber aktualisiert nicht
-    #          (im Gegensatz zu "latest")
-    # ==========================================================
     - name: Nginx installieren
       apt:
         name: nginx
@@ -99,15 +77,6 @@
 
     # ==========================================================
     # TASK 3: UFW FIREWALL AKTIVIEREN
-    # ==========================================================
-    # ZWECK:   Schaltet die Uncomplicated Firewall ein.
-    #          Default: Alle eingehenden Verbindungen blockiert.
-    #
-    # state: enabled → persistent über Neustarts
-    # logging: 'on' → einfaches Logging für Debugging
-    #
-    # WICHTIG: Aktiviert NACHDEM wir SSH freigegeben haben
-    #          (siehe Task 4) – sonst Aussperrung!
     # ==========================================================
     - name: UFW Firewall aktivieren
       ufw:
@@ -117,13 +86,6 @@
     # ==========================================================
     # TASK 4: SSH-PORT FREIGEBEN
     # ==========================================================
-    # ZWECK:   Erlaubt eingehende SSH-Verbindungen (Port 22).
-    #
-    # MUSS vor "ufw enable" stehen, sonst Aussperrung!
-    #
-    # name: OpenSSH → UFW kennt vordefinierte Profile
-    #          → entspricht Port 22/tcp
-    # ==========================================================
     - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
       ufw:
         rule: allow
@@ -131,11 +93,6 @@
 
     # ==========================================================
     # TASK 5: HTTP-PORT 80 FREIGEBEN
-    # ==========================================================
-    # ZWECK:   Erlaubt eingehende HTTP-Verbindungen auf Port 80.
-    #
-    # JEDER darf auf die Webseite zugreifen (keine src-Einschränkung)
-    # → Das ist der Unterschied zum DB-Server (siehe Play 2)
     # ==========================================================
     - name: HTTP Port 80 freigeben
       ufw:
@@ -146,9 +103,6 @@
     # ==========================================================
     # TASK 6: NGINX STARTEN UND FÜR AUTOSTART AKTIVIEREN
     # ==========================================================
-    # ZWECK:   Startet Nginx sofort und stellt sicher, dass es
-    #          beim Booten automatisch startet.
-    # ==========================================================
     - name: Nginx starten und für Autostart aktivieren
       service:
         name: nginx
@@ -157,17 +111,6 @@
 
     # ==========================================================
     # TASK 7: EIGENE INDEX.HTML ERSTELLEN
-    # ==========================================================
-    # ZWECK:   Erstellt eine eigene Webseite mit dynamischen Inhalten.
-    #
-    # content: | → Mehrzeiliger Text (YAML-Block-Skalar)
-    #
-    # DYNAMISCHE VARIABLEN (Ansible-Facts):
-    #   {{ ansible_hostname }} → Hostname der VM
-    #   {{ ansible_default_ipv4.address }} → Primäre IPv4-Adresse
-    #
-    # owner/group: www-data → Nginx-Benutzer auf Ubuntu
-    # mode: '0644' → Leserechte für Nginx
     # ==========================================================
     - name: Eigene index.html erstellen
       copy:
@@ -192,18 +135,7 @@
     # ==========================================================
     # TASK 8: NGINX VERIFIZIEREN
     # ==========================================================
-    # ZWECK:   Prüft, ob Nginx auf Port 80 antwortet.
-    #
-    # uri-Modul → Ansible's eingebauter HTTP-Client
-    # url: http://127.0.0.1 → Test von INNEN der VM (localhost)
-    # status_code: 200 → Erwartet HTTP 200 OK
-    #
-    # register: nginx_check → Speichert Ergebnis für nächsten Task
-    #
-    # checkov:skip → Checkov-Ignorierung für internen Test
-    # ==========================================================
     - name: Prüfen ob Nginx auf Port 80 antwortet
-      # checkov:skip=CKV2_ANSIBLE_1: Interner Localhost-Test, HTTPS nicht nötig
       uri:
         url: http://127.0.0.1
         status_code: 200
@@ -214,12 +146,6 @@
     # ==========================================================
     # TASK 9: ERGEBNIS AUSGEBEN
     # ==========================================================
-    # ZWECK:   Zeigt das Testergebnis im Ansible-Output.
-    #
-    # debug: msg: | → Mehrzeilige Ausgabe im Log
-    #   {{ nginx_check.url }} → Getestete URL
-    #   {{ nginx_check.status }} → HTTP-Statuscode
-    # ==========================================================
     - name: Nginx Status ausgeben
       debug:
         msg: |
@@ -229,29 +155,16 @@
           Host:   {{ ansible_hostname }}
           IP:     {{ ansible_default_ipv4.address }}
 
-
-# ============================================================
-# PLAY 2: DB-SERVER KONFIGURATION
-# ============================================================
-# ZWECK:   Installiert und konfiguriert PostgreSQL.
-#          Konfiguriert Netzwerkzugriff für Web-Server.
-#          Aktiviert Firewall mit IP-basierter Einschränkung.
-#
-# BETRIFFT: Nur Gruppe "dbserver" aus inventory.ini
-#
-# WICHTIG: Eigenständiger Play – komplett unabhängig vom
-#          Web-Server-Play oben. Keine Überschneidungen.
-# ============================================================
+# =================================================================
+# ============================ PLAY 2: DB-SERVER =================
+# =================================================================
 - name: Basis-Setup DB-Server
   hosts: dbserver
   become: true
 
   tasks:
-
     # ==========================================================
     # TASK 1: PAKETLISTEN AKTUALISIEREN
-    # ==========================================================
-    # Gleiches Prinzip wie beim Web-Server-Play
     # ==========================================================
     - name: Paketlisten aktualisieren
       apt:
@@ -261,10 +174,6 @@
     # ==========================================================
     # TASK 2: POSTGRESQL INSTALLIEREN
     # ==========================================================
-    # name: postgresql (ohne Versionsnummer)
-    #   → Installiert Standardversion aus Ubuntu 22.04
-    #   → Aktuell PostgreSQL 14
-    # ==========================================================
     - name: PostgreSQL installieren
       apt:
         name: postgresql
@@ -272,20 +181,6 @@
 
     # ==========================================================
     # TASK 3: POSTGRESQL AUF ALLEN INTERFACES LAUSCHEN LASSEN
-    # ==========================================================
-    # ZWECK:   Erlaubt PostgreSQL, Verbindungen von außen anzunehmen.
-    #
-    # Standard: "listen_addresses = 'localhost'"
-    # → Nur lokale Verbindungen möglich
-    #
-    # ÄNDERUNG: "listen_addresses = '*'"
-    # → Lauscht auf allen Netzwerk-Interfaces
-    #
-    # lineinfile: Sucht nach regexp und ersetzt/ergänzt die Zeile
-    # backup: yes → Sicherungskopie der Originaldatei
-    #
-    # WICHTIG: Dies öffnet nur die "Außentür" – wer reinkommt,
-    #          entscheidet pg_hba.conf (siehe Task 4)
     # ==========================================================
     - name: PostgreSQL auf allen Interfaces lauschen lassen
       lineinfile:
@@ -298,22 +193,6 @@
     # ==========================================================
     # TASK 4: WEB-SERVER-ZUGRIFF IN PG_HBA.CONF ERLAUBEN
     # ==========================================================
-    # ZWECK:   Definiert, wer sich mit der Datenbank verbinden darf.
-    #
-    # listen_addresses öffnet nur die "Außentür" – pg_hba.conf
-    # entscheidet, wer tatsächlich reinkommt.
-    #
-    # FORMAT: host    database    user    address    auth-method
-    #         host    all         all     10.0.30.101/32 md5
-    #
-    # all/all → bewusst offen (noch kein eigener DB-User/DB,
-    #           siehe Phase 5/Vault)
-    # /32 → Nur EXAKT diese eine IP (Web-Server)
-    # md5 → Passwort-Authentifizierung
-    #
-    # insertafter: EOF → Fügt am Ende der Datei ein
-    # backup: yes → Sicherungskopie
-    # ==========================================================
     - name: Web-Server-Zugriff in pg_hba.conf erlauben
       lineinfile:
         path: /etc/postgresql/14/main/pg_hba.conf
@@ -325,8 +204,6 @@
     # ==========================================================
     # TASK 5: UFW FIREWALL AKTIVIEREN
     # ==========================================================
-    # Gleiches Prinzip wie beim Web-Server
-    # ==========================================================
     - name: UFW Firewall aktivieren
       ufw:
         state: enabled
@@ -335,8 +212,6 @@
     # ==========================================================
     # TASK 6: SSH-PORT FREIGEBEN
     # ==========================================================
-    # MUSS vor "ufw enable" stehen, sonst Aussperrung!
-    # ==========================================================
     - name: SSH Port freigeben (damit wir nicht ausgesperrt werden!)
       ufw:
         rule: allow
@@ -344,17 +219,6 @@
 
     # ==========================================================
     # TASK 7: POSTGRESQL-PORT NUR FÜR WEB-SERVER FREIGEBEN
-    # ==========================================================
-    # ZWECK:   Erlaubt Zugriff auf Port 5432 NUR von Web-Server-IP.
-    #
-    # src: 10.0.30.101 → Nur diese Quell-IP darf verbinden
-    #
-    # DREI UNABHÄNGIGE EBENEN:
-    #   1. listen_addresses = '*' (PostgreSQL lauscht überall)
-    #   2. pg_hba.conf (erlaubt nur Web-Server-IP)
-    #   3. UFW (Firewall blockiert alle anderen)
-    #
-    # → Defence in Depth: Mehrere Sicherheitsschichten
     # ==========================================================
     - name: PostgreSQL Port 5432 nur für web-server freigeben
       ufw:
@@ -375,22 +239,11 @@
     # ==========================================================
     # TASK 9: HANDLER SOFORT AUSFÜHREN
     # ==========================================================
-    # ZWECK:   Erzwingt die sofortige Ausführung der Handler.
-    #
-    # PROBLEM: Handler laufen standardmäßig erst am Play-Ende.
-    #          Wir brauchen den Neustart aber JETZT, damit der
-    #          folgende Test den aktuellen Zustand sieht.
-    #
-    # meta: flush_handlers → Führt alle gependingen Handler aus
-    # ==========================================================
     - name: Sicherstellen, dass PostgreSQL-Neustart bereits erfolgt ist
       meta: flush_handlers
 
     # ==========================================================
     # TASK 10: POSTGRESQL VERIFIZIEREN
-    # ==========================================================
-    # pg_isready → Eingebautes PostgreSQL-Tool zur Statusprüfung
-    # changed_when: false → Reiner Lese-Check, keine Veränderung
     # ==========================================================
     - name: Prüfen ob PostgreSQL bereit ist
       command: pg_isready
@@ -410,27 +263,49 @@
           Host:     {{ ansible_hostname }}
           IP:       {{ ansible_default_ipv4.address }}
 
-  # ============================================================
-  # HANDLERS
-  # ============================================================
-  # ZWECK:   Aktionen, die bei Änderungen ausgeführt werden.
-  #          Werden von notify: aus Tasks getriggert.
-  #
-  # WICHTIG: Name MUSS exakt mit notify: übereinstimmen
-  #          (reine Textübereinstimmung)
-  # ============================================================
   handlers:
-
     # ==========================================================
     # HANDLER: POSTGRESQL NEU STARTEN
-    # ==========================================================
-    # WIRD GETRIGGERT VON:
-    #   - Task 3: listen_addresses ändern
-    #   - Task 4: pg_hba.conf ändern
-    #
-    # state: restarted → Stoppt und startet PostgreSQL neu
     # ==========================================================
     - name: PostgreSQL neu starten
       service:
         name: postgresql
         state: restarted
+
+# =================================================================
+# ================= PLAY 3: TEST-VM STICHPROBENPRÜFUNG ===========
+# =================================================================
+- name: Stichprobenprüfung Golden-Template (Test-VM)
+  hosts: testserver
+  become: true
+
+  tasks:
+    # ==========================================================
+    # TASK 1: SSH-PASSWORT-LOGIN-CHECK
+    # ==========================================================
+    - name: PasswordAuthentication in sshd_config prüfen
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication\s'
+        line: "PasswordAuthentication no"
+      check_mode: yes
+      register: ssh_check
+      failed_when: ssh_check.changed == true
+
+    # ==========================================================
+    # TASK 2: SECURITY-UPDATES-CONFIG-CHECK
+    # ==========================================================
+    - name: Security-Updates-Konfiguration prüfen
+      command: grep -q "jammy-security" /etc/apt/apt.conf.d/51security-only
+      register: security_updates_check
+      changed_when: false
+      failed_when: security_updates_check.rc != 0
+
+    # ==========================================================
+    # TASK 3: ERGEBNIS AUSGEBEN
+    # ==========================================================
+    - name: Ergebnis der Stichprobenprüfung ausgeben
+      debug:
+        msg:
+          - "SSH-Passwort-Login gesperrt: {{ 'OK' if not ssh_check.changed else 'FEHLER' }}"
+          - "Security-Updates korrekt konfiguriert: {{ 'OK' if security_updates_check.rc == 0 else 'FEHLER' }}"
