@@ -10,11 +10,11 @@
 #   5️ Ansible konfiguriert Nginx-Webserver auf der VM
 #
 #  Erstellt am:       2026-06-27
-#  Letzte Änderung am:2026-08-23 
+#  Letzte Änderung am:2026-08-28 
 #  Autor:          Randolph Bluming
 #  Repository:     GitHub Actions (self-hosted Runner)
 #  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
-# ===================================================================
+
 
 # ===================================================================
 # PIPELINE-KONFIGURATION
@@ -53,9 +53,7 @@ on:
   workflow_dispatch:
     
 # ===================================================================
-# SICHERHEITSBERECHTIGUNGEN
-# ===================================================================
-# Minimale Rechte für die Pipeline (Prinzip der geringsten Privilegien)
+# SICHERHEITSBERECHTIGUNGEN Minimale Rechte für die Pipeline (Prinzip der geringsten Privilegien)
 # ===================================================================
 permissions:
   contents: read  # Nur Lesezugriff auf Repository-Inhalte
@@ -64,6 +62,38 @@ permissions:
 # PIPELINE-JOBS
 # ===================================================================
 jobs:
+  # =================================================================
+  # JOB 0: GEÄNDERTE DATEIEN ERKENNEN
+  # =================================================================
+  # Ziel: Stellt fest, welche Verzeichnisse sich im aktuellen Commit
+  #       geändert haben (packer/, terraform/, ansible/)
+  # Ergebnis: Drei true/false-Werte, die nachfolgende Jobs steuern
+  # =================================================================
+  detect-changes:
+    runs-on: [self-hosted, proxmox]
+    outputs:
+      packer: ${{ steps.filter.outputs.packer }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+      ansible: ${{ steps.filter.outputs.ansible }}
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v6
+
+      - name: Geänderte Pfade erkennen
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            packer:
+              - 'packer/**'
+              - '.github/workflows/pipeline.yml'
+            terraform:
+              - 'terraform/**'
+              - '.github/workflows/pipeline.yml'
+            ansible:
+              - 'ansible/**'
+              - '.github/workflows/pipeline.yml'
 
   # =================================================================
   # JOB 1: VM-TEMPLATE MIT PACKER BAUEN
@@ -75,9 +105,11 @@ jobs:
   build-template:
     # Läuft auf einem selbst-gehosteten Runner in deinem Proxmox-Netzwerk
     # Dadurch kann der Runner direkt auf Proxmox zugreifen
+    needs: detect-changes
+    if: needs.detect-changes.outputs.packer == 'true'
     runs-on: [self-hosted, proxmox]
     outputs:
-      new_template_id: ${{ steps.get-template-id.outputs.template_id }}  # ID des erstellten Templates
+      new_template_id: ${{ steps.get-template-id.outputs.template_id }}
 
     steps:
       # ---------------------------------------------------------------
@@ -167,12 +199,27 @@ jobs:
   # =================================================================
   # JOB 2: SECURITY-GATE MIT CHECKOV
   # =================================================================
-  # Ziel: Sicherheitsscan des Terraform-Codes BEVOR deployt wird
-  # Wartet auf: build-template
-  # Verhalten: HARTES GATE - bricht Pipeline bei Fehlern ab
-  # =================================================================
+  # --- IF-BEDINGUNG: Lauf trotz übersprungenem build-template (Fallback auf Template 2000) ---
+  # `always()` sorgt dafür, dass dieser Job AUCH DANN gestartet wird,
+  # wenn der vorherige Job (build-template) fehlgeschlagen oder abgebrochen wurde.
+  # Das ist wichtig, weil wir den Scan nicht einfach überspringen wollen,
+  # wenn der Build fehlschlägt – wir wollen dennoch den Status sehen.
+  #
+  # Die zweite Bedingung (nach dem `&&`) prüft dann, ob der vorherige Job
+  # entweder "success" oder "skipped" war. Nur dann führen wir den Scan
+  # tatsächlich aus. War der vorherige Job "failure" oder "cancelled",
+  # wird dieser Job übersprungen (weil es keinen Sinn macht, toten Code zu scannen).
+  #
+  # Zusammengefasst: Der Job läuft immer, aber er wird nur dann
+  # ausgeführt, wenn der Build erfolgreich oder übersprungen war.
+  # Bei Fehlern im Build wird der Scan übersprungen (aber der Job gilt
+  # trotzdem als gestartet, was für die Pipeline-Übersicht wichtig ist).
+  # -----------------------------------------------------------------
   security-scan:
-    needs: build-template  # Startet erst wenn Job 1 erfolgreich war
+    needs: build-template
+    if: |
+      always() &&
+      (needs.build-template.result == 'success' || needs.build-template.result == 'skipped')
     runs-on: [self-hosted, proxmox]
 
     steps:
@@ -212,8 +259,13 @@ jobs:
   # Wartet auf: build-template UND security-scan (beide erfolgreich)
   # Ergebnis: VM läuft in Proxmox mit einer IP-Adresse
   # =================================================================
+  # ---- always()-Fix: Job soll auch bei übersprungenem Packer-Build weiterlaufen ----
   deploy-vm:
-    needs: [build-template, security-scan]  # Wartet auf beide Jobs
+    needs: [build-template, security-scan]
+    if: |
+      always() &&
+      (needs.build-template.result == 'success' || needs.build-template.result == 'skipped') &&
+      needs.security-scan.result == 'success'
     runs-on: [self-hosted, proxmox]
 
     # =============================================================
@@ -256,7 +308,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
 
       # ---------------------------------------------------------------
       # Schritt 4: Terraform Plan anzeigen
@@ -272,7 +324,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
 
       # ---------------------------------------------------------------
       # Schritt 5: VM deployen
@@ -288,7 +340,7 @@ jobs:
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id }}
+          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
       # ---------------------------------------------------------------
       # Schritt 6: VM IP-Adressen auslesen
       # ---------------------------------------------------------------
