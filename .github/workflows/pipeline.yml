@@ -79,6 +79,8 @@ jobs:
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v6
+        with:
+          clean: false  # Verhindert Löschen der terraform.tfstate im Runner-Workspace
 
       - name: Geänderte Pfade erkennen
         id: filter
