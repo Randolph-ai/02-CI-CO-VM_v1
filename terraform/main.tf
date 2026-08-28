@@ -5,7 +5,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-08-11
+# Letzte Änderung: 2026-08-28
 # ============================================================
 
 # ============================================================
@@ -186,6 +186,16 @@ resource "proxmox_virtual_environment_vm" "web_server" {
       keys     = [trimspace(var.ssh_public_key)]
     }
 
+  }
+
+  # ---- LIFECYCLE: clone-Block nach Import ignorieren ----
+  # Proxmox speichert nicht dauerhaft, aus welchem Template eine VM
+  # geklont wurde. Nach terraform import ist dieser Wert im State leer,
+  # wodurch Terraform sonst bei jedem plan eine komplette
+  # Neuerstellung vorschlägt (destroy + create). ignore_changes
+  # unterdrückt das gezielt für dieses eine, unproblematische Feld.
+  lifecycle {
+    ignore_changes = [clone]
   }
 }
 
@@ -425,6 +435,11 @@ resource "proxmox_virtual_environment_vm" "db_server" {
 
   } # Ende initialization
 
+  # ---- LIFECYCLE: clone-Block nach Import ignorieren ----
+  lifecycle {
+    ignore_changes = [clone]
+  }
+
 } # Ende resource
 
 # ============================================================
@@ -622,6 +637,7 @@ resource "proxmox_virtual_environment_vm" "test_vm" {
       keys     = [trimspace(var.ssh_public_key)]
     }
   }
+
 }
 
 # ============================================================
