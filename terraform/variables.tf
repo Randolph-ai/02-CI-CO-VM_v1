@@ -187,4 +187,5 @@ variable "db_server_ip" {
 variable "test_template_id" {
   description = "VM-ID des frisch gebauten, noch ungetesteten Templates (aus Job 1, new_template_id-Output)"
   type        = number
+  default     = 2000
 }
