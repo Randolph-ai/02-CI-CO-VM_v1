@@ -9,8 +9,8 @@
 #   4️ Checkov scannt Ansible (Beobachtungsmodus - kein Abbruch)
 #   5️ Ansible konfiguriert Nginx-Webserver auf der VM
 #
-#  Erstellt am:       2026-06-27
-#  Letzte Änderung am:2026-08-28 
+#  Erstellt am:         2026-06-27
+#  Letzte Änderung am:  2026-09-11 
 #  Autor:          Randolph Bluming
 #  Repository:     GitHub Actions (self-hosted Runner)
 #  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
@@ -303,14 +303,21 @@ jobs:
       - name: Terraform initialisieren
         run: |
           cd terraform
+          
+          # Fallback-Logik test_template_id:
+          # Normalfall: build-template liefert neue ID → wird hier gesetzt, überschreibt Default
+          # Ausnahmefall: build-template übersprungen → new_template_id leer → export entfällt
+          #               → Terraform nutzt eigenen default (2000) aus variables.tf
+
+          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          fi
           terraform init
         env:
-          # TF_VAR_pm_api_url → var.pm_api_url in Terraform
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
 
       # ---------------------------------------------------------------
       # Schritt 4: Terraform Plan anzeigen
@@ -320,13 +327,16 @@ jobs:
       - name: Terraform Plan anzeigen
         run: |
           cd terraform
+          # Fallback-Logik test_template_id: siehe Kommentar bei "Terraform initialisieren"
+          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          fi
           terraform plan
         env:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
 
       # ---------------------------------------------------------------
       # Schritt 5: VM deployen
@@ -336,13 +346,16 @@ jobs:
       - name: VM deployen
         run: |
           cd terraform
+          # Fallback-Logik test_template_id: siehe Kommentar bei "Terraform initialisieren"
+          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          fi
           terraform apply -auto-approve
         env:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
           TF_VAR_pm_api_token_secret: ${{ secrets.TF_VAR_PM_API_TOKEN_SECRET }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
-          TF_VAR_test_template_id: ${{ needs.build-template.outputs.new_template_id || '2000' }}  # Fallback auf Template-ID 2000 falls build-template übersprungen wurde
       # ---------------------------------------------------------------
       # Schritt 6: VM IP-Adressen auslesen
       # ---------------------------------------------------------------
