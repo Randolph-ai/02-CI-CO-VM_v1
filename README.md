@@ -144,15 +144,18 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 
 ## ▶️ Nutzung
 
-Ein Push auf `main` löst die Pipeline mit fünf aufeinander aufbauenden Jobs aus:
+Ein Push auf `main` löst die Pipeline mit sechs aufeinander aufbauenden Jobs aus:
 
 ```
-build-template          → Packer baut/erneuert das Golden-Image-Template
+detect-changes          → Erkennt geänderte Verzeichnisse (packer/terraform/ansible)
+build-template          → Packer baut/erneuert das Golden-Image-Template (nur bei Packer-Änderung)
 security-scan           → Checkov-Gate, Terraform (hart) – Stop bei Verstoß
 deploy-vm               → Terraform provisioniert Web-Server UND DB-Server
 ansible-security-scan   → Checkov-Gate, Ansible (weich) – Report, kein Stop
 configure-vm            → Ansible konfiguriert Nginx und PostgreSQL
 ```
+
+`build-template` läuft nur, wenn `detect-changes` eine Änderung im `packer/`-Verzeichnis (oder an `pipeline.yml` selbst) erkennt – bei reinen Terraform-/Ansible-Änderungen wird der Job übersprungen.
 
 Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden die folgenden drei Jobs gar nicht erst gestartet ("Skipped", 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate).
 
