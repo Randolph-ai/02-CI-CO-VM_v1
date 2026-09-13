@@ -570,6 +570,7 @@ jobs:
       - name: Repository auschecken
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.head_ref }}
           clean: false
 
       # ---------------------------------------------------------------
