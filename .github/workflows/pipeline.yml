@@ -578,7 +578,7 @@ jobs:
       # ---------------------------------------------------------------
       - name: Template taggen
         run: |
-          curl -k -X PUT \
+          curl -k -f -X PUT \
             "${{ secrets.PROXMOX_URL }}api2/json/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${{ needs.build-template.outputs.new_template_id }}/config" \
             -H "Authorization: PVEAPIToken=${{ secrets.PROMOTION_TOKEN_ID }}=${{ secrets.PROMOTION_TOKEN_SECRET }}" \
             -d "tags=promoted"
