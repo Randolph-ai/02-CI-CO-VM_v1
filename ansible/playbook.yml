@@ -285,7 +285,7 @@
     # TASK 2: SECURITY-UPDATES-CONFIG-CHECK
     # ==========================================================
     - name: Security-Updates-Konfiguration prüfen
-      command: grep -q "jammy-security-TESTFEHLER" /etc/apt/apt.conf.d/51security-only
+      command: grep -q "jammy-security" /etc/apt/apt.conf.d/51security-only
       register: security_updates_check
       changed_when: false
       failed_when: security_updates_check.rc != 0
