@@ -361,6 +361,9 @@ jobs:
   # =================================================================
   ansible-security-scan:
     needs: deploy-vm
+    if: |
+      always() &&
+      needs.deploy-vm.result == 'success'
     runs-on: [self-hosted, proxmox]
 
     steps:
@@ -401,6 +404,9 @@ jobs:
   # =================================================================
   configure-vm:
     needs: [deploy-vm, ansible-security-scan]
+    if: |
+      always() &&
+      needs.ansible-security-scan.result == 'success'
     runs-on: [self-hosted, proxmox]
 
     steps:
