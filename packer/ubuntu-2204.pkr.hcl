@@ -6,7 +6,7 @@
 #
 # AUTOR:       Randolph Bluming
 # Erstellt am:     2026-06-27
-# Letzte Änderung: 2026-08-09
+# Letzte Änderung: 2026-09-15
 # ============================================================
 # ========================
 # required_plugins
@@ -338,8 +338,10 @@ build {
       #        Wichtig für DHCP und Netzwerk-Kommunikation
       "sudo rm -f /etc/machine-id",
       "sudo touch /etc/machine-id",
-      "sudo userdel -f -r randolph" # ← jetzt als letzter Befehl im gesamten Block
-      
+      "sudo passwd -l randolph",
+      "sudo usermod -s /usr/sbin/nologin randolph",
+      "sudo find / -xdev \\( -path /home/randolph -o -path /root \\) -name 'authorized_keys' -delete 2>/dev/null || true" # ← jetzt als letzter Befehl im gesamten Block
+
     ]
   }
   # NEU: hier einfügen, nach dem provisioner-Block, noch innerhalb der
