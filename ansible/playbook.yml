@@ -39,20 +39,9 @@
 #   - Nginx/PostgreSQL schon installiert? → Task wird übersprungen
 #   - Dienst läuft schon? → Task wird übersprungen
 #   - Firewall-Regel existiert schon? → Task wird übersprungen
-#
-# SICHERHEITSKONZEPT (Defence in Depth für DB-Server):
-#   1. listen_addresses = '*'  → PostgreSQL lauscht überall
-#   2. pg_hba.conf             → Erlaubt NUR Web-Server-IP
-#   3. UFW-Firewall            → Blockiert alle anderen Ports
-#
-# ABHÄNGIGKEITEN:
-#   - VMs müssen laufen und SSH erreichbar sein
-#   - SSH-Key muss in GitHub Secrets hinterlegt sein
-#   - Python3 muss auf den VMs installiert sein
-
 
 # =================================================================
-# ============================== PLAY 1: WEB-SERVER ===============
+# ============== PLAY 1: WEB-SERVER ===============================
 # =================================================================
 - name: Basis-Setup Web-Server
   hosts: webserver
@@ -156,7 +145,7 @@
           IP:     {{ ansible_default_ipv4.address }}
 
 # =================================================================
-# ============================ PLAY 2: DB-SERVER =================
+# ============ PLAY 2: DB-SERVER ==================================
 # =================================================================
 - name: Basis-Setup DB-Server
   hosts: dbserver

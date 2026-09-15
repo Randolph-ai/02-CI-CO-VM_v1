@@ -564,7 +564,9 @@ jobs:
   # =================================================================
   promote-template:
     needs: [build-template, configure-vm]
-    if: needs.configure-vm.result == 'success'
+    if: |
+      always() && 
+      needs.configure-vm.result == 'success'
     runs-on: [self-hosted, proxmox]
     permissions:
       contents: write  # NUR dieser Job darf ins Repo committen
