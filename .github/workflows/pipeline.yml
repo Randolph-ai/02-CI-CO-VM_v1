@@ -253,6 +253,7 @@ jobs:
       vm_ip: ${{ steps.get-ip.outputs.vm_ip }}          # Web-Server IP
       db_vm_ip: ${{ steps.get-ip.outputs.db_vm_ip }}    # DB-Server IP
       test_vm_ip: ${{ steps.get-ip.outputs.test_vm_ip }} # Wegwerf-Test-VM IP
+      effective_template_id: ${{ steps.effective-template.outputs.template_id }} # Tatsächlich getestetes Template
 
     steps:
       # ---------------------------------------------------------------
@@ -264,25 +265,41 @@ jobs:
           clean: false
 
       # ---------------------------------------------------------------
-      # Schritt 2: Terraform-Installation prüfen
+      # Schritt 2: Effektive Template-ID bestimmen
+      # ---------------------------------------------------------------
+      # Zentrale Stelle für die Fallback-Priorität (einmal statt dreimal):
+      # 1. Manueller Input (workflow_dispatch) hat Vorrang
+      # 2. Sonst: frisch gebautes Template aus build-template
+      # 3. Sonst: leer -> Terraform nutzt eigenen default-Wert
+      - name: Effektive Template-ID bestimmen
+        id: effective-template
+        run: |
+          if [ -n "${{ github.event.inputs.template_id }}" ]; then
+            EFFECTIVE_ID="${{ github.event.inputs.template_id }}"
+          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+            EFFECTIVE_ID="${{ needs.build-template.outputs.new_template_id }}"
+          else
+            EFFECTIVE_ID=""
+          fi
+          echo "Effektive Template-ID: $EFFECTIVE_ID"
+          echo "template_id=$EFFECTIVE_ID" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------
+      # Schritt 3: Terraform-Installation prüfen
       # ---------------------------------------------------------------
       - name: Terraform Version prüfen
         run: terraform version
 
       # ---------------------------------------------------------------
-      # Schritt 3: Terraform initialisieren
+      # Schritt 4: Terraform initialisieren
       # ---------------------------------------------------------------
       # Provider/Plugins laden.
-      # Fallback test_template_id:
-      #   Normalfall: neue ID aus build-template überschreibt Default
-      #   Ausnahme: build-template übersprungen → leer → Default 2000
       - name: Terraform initialisieren
         run: |
           cd terraform
-          if [ -n "${{ github.event.inputs.template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
-          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          # Effektive Template-ID: siehe Schritt 2 "Effektive Template-ID bestimmen"
+          if [ -n "${{ steps.effective-template.outputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id }}"
           fi
           terraform init
         env:
@@ -292,17 +309,15 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # ---------------------------------------------------------------
-      # Schritt 4: Terraform Plan anzeigen
+      # Schritt 5: Terraform Plan anzeigen
       # ---------------------------------------------------------------
       # Zeigt geplante Änderungen (ohne Ausführung).
       - name: Terraform Plan anzeigen
         run: |
           cd terraform
-          # Fallback-Logik: siehe "Terraform initialisieren"
-          if [ -n "${{ github.event.inputs.template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
-          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          # Effektive Template-ID: siehe Schritt 2 "Effektive Template-ID bestimmen"
+          if [ -n "${{ steps.effective-template.outputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id }}"
           fi
           terraform plan
         env:
@@ -312,17 +327,15 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # ---------------------------------------------------------------
-      # Schritt 5: VM deployen
+      # Schritt 6: VM deployen
       # ---------------------------------------------------------------
       # Eigentliche VM-Erstellung (ohne manuelle Bestätigung).
       - name: VM deployen
         run: |
           cd terraform
-          # Fallback-Logik: siehe "Terraform initialisieren"
-          if [ -n "${{ github.event.inputs.template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
-          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
-            export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
+          # Effektive Template-ID: siehe Schritt 2 "Effektive Template-ID bestimmen"
+          if [ -n "${{ steps.effective-template.outputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id }}"
           fi
           terraform apply -auto-approve
         env:
@@ -332,7 +345,7 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
       # ---------------------------------------------------------------
-      # Schritt 6: VM IP-Adressen auslesen
+      # Schritt 7: VM IP-Adressen auslesen
       # ---------------------------------------------------------------
       # IPs aus Terraform-Outputs lesen und weitergeben.
       - name: VM IP-Adresse auslesen
@@ -363,7 +376,7 @@ jobs:
           # IPs als Output für Folg ejobs bereitstellen
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
           echo "db_vm_ip=$DB_VM_IP" >> $GITHUB_OUTPUT
-          echo "test_vm_ip=$TEST_VM_IP" >> $GITHUB_OUTPUT
+          echo "test_vm_ip=$TEST_VM_IP" >> $GITHUB_OUTPUT  
 
   # =================================================================
   # JOB 4: ANSIBLE SECURITY-SCAN (BEOBACHTUNGSMODUS)
@@ -575,7 +588,7 @@ jobs:
   # Freigabe mit Datum und Commit-SHA im Repo.
   # =================================================================
   promote-template:
-    needs: [build-template, configure-vm]
+    needs: [build-template, deploy-vm, configure-vm]
     if: |
       always() && 
       needs.configure-vm.result == 'success'
@@ -599,7 +612,7 @@ jobs:
       - name: Template taggen
         run: |
           curl -k -f -X PUT \
-            "${{ secrets.PROXMOX_URL }}/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${{ needs.build-template.outputs.new_template_id }}/config" \
+            "${{ secrets.PROXMOX_URL }}/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${{ needs.deploy-vm.outputs.effective_template_id }}/config" \
             -H "Authorization: PVEAPIToken=${{ secrets.PROMOTION_TOKEN_ID }}=${{ secrets.PROMOTION_TOKEN_SECRET }}" \
             -d "tags=promoted"
 
@@ -608,9 +621,10 @@ jobs:
       # ---------------------------------------------------------------
       - name: Freigabe protokollieren
         run: |
-          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | Template ${{ needs.build-template.outputs.new_template_id }} | Commit ${{ github.sha }} | Play-3-Test bestanden" >> docs/promotion-log.md
+          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | Template ${{ needs.deploy-vm.outputs.effective_template_id }} | Commit ${{ github.sha }} | Play-3-Test bestanden" >> docs/promotion-log.md
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/promotion-log.md
-          git commit -m "Promotion: Template ${{ needs.build-template.outputs.new_template_id }}"
+          git commit -m "Promotion: Template ${{ needs.deploy-vm.outputs.effective_template_id }}"
           git push origin HEAD:${{ github.head_ref || github.ref_name }}
+          
