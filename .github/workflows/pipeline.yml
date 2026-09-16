@@ -48,6 +48,11 @@ on:
   # Manueller Start über GitHub-Actions-UI
   # Ermöglicht Testen auf Feature-Branch ohne Push/PR auf main
   workflow_dispatch:
+    inputs:
+      template_id:
+        description: 'Optionale Template-ID für Wegwerf-Test-VM (überschreibt Fallback — z. B. zum isolierten Testen eines bestimmten Templates)'
+        required: false
+        type: string
     
 # ===================================================================
 # SICHERHEITSBERECHTIGUNGEN
@@ -241,7 +246,8 @@ jobs:
     runs-on: [self-hosted, proxmox]
 
     # =============================================================
-    # OUTPUTS: IP-Adressen für nachfolgende Jobs
+    # OUTPUTS: IP-Adressen für nachfolgende Jobs 
+    # kommt von Schritt 6: VM IP-Adressen auslesen
     # =============================================================
     outputs:
       vm_ip: ${{ steps.get-ip.outputs.vm_ip }}          # Web-Server IP
@@ -273,7 +279,9 @@ jobs:
       - name: Terraform initialisieren
         run: |
           cd terraform
-          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+          if [ -n "${{ github.event.inputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
+          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
             export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
           fi
           terraform init
@@ -291,7 +299,9 @@ jobs:
         run: |
           cd terraform
           # Fallback-Logik: siehe "Terraform initialisieren"
-          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+          if [ -n "${{ github.event.inputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
+          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
             export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
           fi
           terraform plan
@@ -309,7 +319,9 @@ jobs:
         run: |
           cd terraform
           # Fallback-Logik: siehe "Terraform initialisieren"
-          if [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
+          if [ -n "${{ github.event.inputs.template_id }}" ]; then
+            export TF_VAR_test_template_id="${{ github.event.inputs.template_id }}"
+          elif [ -n "${{ needs.build-template.outputs.new_template_id }}" ]; then
             export TF_VAR_test_template_id="${{ needs.build-template.outputs.new_template_id }}"
           fi
           terraform apply -auto-approve
