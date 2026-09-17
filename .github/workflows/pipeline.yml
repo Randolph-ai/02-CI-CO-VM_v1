@@ -10,7 +10,7 @@
 #   5️ Ansible konfiguriert Nginx-Webserver auf der VM
 #
 #  Erstellt am:         2026-06-27
-#  Letzte Änderung am:  2026-09-13 
+#  Letzte Änderung am:  2026-09-17 
 #  Autor:          Randolph Bluming
 #  Repository:     GitHub Actions (self-hosted Runner)
 #  Trigger:        Push auf main (nur bei Änderungen in packer/, terraform/, ansible/)
@@ -253,7 +253,7 @@ jobs:
       vm_ip: ${{ steps.get-ip.outputs.vm_ip }}          # Web-Server IP
       db_vm_ip: ${{ steps.get-ip.outputs.db_vm_ip }}    # DB-Server IP
       test_vm_ip: ${{ steps.get-ip.outputs.test_vm_ip }} # Wegwerf-Test-VM IP
-      effective_template_id: ${{ steps.effective-template.outputs.template_id }} # Tatsächlich getestetes Template
+      effective_template_id: ${{ steps.get-ip.outputs.used_template_id }}
 
     steps:
       # ---------------------------------------------------------------
@@ -283,6 +283,7 @@ jobs:
           fi
           echo "Effektive Template-ID: $EFFECTIVE_ID"
           echo "template_id=$EFFECTIVE_ID" >> "$GITHUB_OUTPUT"
+          
 
       # ---------------------------------------------------------------
       # Schritt 3: Terraform-Installation prüfen
@@ -357,6 +358,7 @@ jobs:
           VM_IP=$(terraform output -raw vm_ip 2>/dev/null)
           DB_VM_IP=$(terraform output -raw db_server_ip 2>/dev/null)
           TEST_VM_IP=$(terraform output -raw test_vm_ip 2>/dev/null)
+          USED_TEMPLATE_ID=$(terraform output -raw used_test_template_id 2>/dev/null)
 
           # Sicherheitscheck: Abbruch bei fehlenden IPs
           # (verhindert Arbeit mit leeren Werten)
@@ -377,6 +379,7 @@ jobs:
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
           echo "db_vm_ip=$DB_VM_IP" >> $GITHUB_OUTPUT
           echo "test_vm_ip=$TEST_VM_IP" >> $GITHUB_OUTPUT  
+          echo "used_template_id=$USED_TEMPLATE_ID" >> $GITHUB_OUTPUT 
 
   # =================================================================
   # JOB 4: ANSIBLE SECURITY-SCAN (BEOBACHTUNGSMODUS)

@@ -138,3 +138,20 @@ output "test_vm_ip" {
   )
   description = "IP-Adresse der Wegwerf-Test-VM (Phase 2B.2)"
 }
+
+# ============================================================
+# OUTPUT: USED_TEST_TEMPLATE_ID
+# ZWECK: Gibt die Template-ID zurück, die beim letzten `apply`
+#        TATSÄCHLICH zum Klonen der Test-VM verwendet wurde —
+#        unabhängig davon, ob sie über TF_VAR_test_template_id
+#        (manueller Input oder frisch gebautes Template) gesetzt
+#        wurde, oder ob Terraform seinen eigenen Default aus
+#        variables.tf (aktuell 2000) benutzt hat.
+#        Einzige verlässliche Quelle für "welches Template wurde
+#        wirklich getestet" — die Pipeline muss diesen Wert nicht
+#        mehr selbst herleiten oder erraten.
+# ============================================================
+output "used_test_template_id" {
+  value       = var.test_template_id
+  description = "Tatsächlich für die Test-VM verwendete Template-ID"
+}
