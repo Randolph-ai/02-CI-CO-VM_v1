@@ -639,12 +639,13 @@ resource "proxmox_virtual_environment_vm" "test_vm" {
   }
 
 }
-
 # ============================================================
-# NACH DEM TEST (Phase 2B.3):
-#   Diese VM wird automatisch wieder gelöscht!
-#   - Sie ist NUR für den Test-Zeitraum gedacht
-#   - Keine manuelle Bereinigung nötig
-#   - Bei Fehlern: VM bleibt als "test-vm-temp" sichtbar
-#   - Manuelles Löschen: qm destroy <VM-ID> (nach Rücksprache)
+# NACH DEM TEST:
+#   Diese VM wird NICHT automatisch gelöscht — die Pipeline
+#   hat keinen destroy-Schritt für test_vm.
+#   - Bleibt nach erfolgreichem Test als "test-vm-temp" laufend stehen
+#   - Manuelles Aufräumen erforderlich: qm stop <VM-ID> && qm destroy <VM-ID>
+#   - Automatisches Löschen ist als spätere Perspektive denkbar
+#     (Phase 2B.3, siehe Projekt-Kompass), aber bewusst noch nicht
+#     umgesetzt
 # ============================================================
