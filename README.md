@@ -187,6 +187,7 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` bei SSH | VM wurde unter gleicher IP neu aufgebaut, neuer Host-Key | `ssh-keygen -f ~/.ssh/known_hosts -R '<ip>'` |
 | Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check | Ohne `--check`-Filter testen |
 | Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder falscher `--external-checks-dir`-Pfad | Ordnerstruktur prüfen; direkter `importlib`-Test macht den Fehler sichtbar |
+| `build-template` läuft bei jedem manuellen `workflow_dispatch`-Lauf, auch ohne Packer-Änderung | `paths-filter` vergleicht mangels zweitem Commit (`fetch-depth: 1` Default) gegen einen leeren Zustand – alle Dateien gelten dann als "geändert" | `fetch-depth: 2` im `actions/checkout`-Schritt von `detect-changes` setzen |
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
