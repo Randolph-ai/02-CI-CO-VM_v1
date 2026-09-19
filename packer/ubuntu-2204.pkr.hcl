@@ -254,7 +254,7 @@ build {
       # WARUM DAS GEFAHRLOS IST: In der gesamten VM-Kette (VM 9000 ->
       # Packer-Build -> Template 2000 -> Terraform-VM) wird schon
       # jetzt ausschließlich mit SSH-Keys gearbeitet (User "randolph"
-      # beim Build, User "ubuntu" in Produktion). Passwort-Login wurde
+      # beim Build, User "ansible" in Produktion). Passwort-Login wurde
       # nie tatsächlich genutzt - diese Einstellung schließt also nur
       # einen theoretischen, ungenutzten Zugangsweg.
       "sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config",
