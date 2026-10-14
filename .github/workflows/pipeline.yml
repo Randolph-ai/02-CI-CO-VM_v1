@@ -244,6 +244,12 @@ jobs:
       (needs.build-template.result == 'success' || needs.build-template.result == 'skipped') &&
       needs.security-scan.result == 'success'
     runs-on: [self-hosted, proxmox]
+    # =============================================================
+    # ENV (Phase 3): Schlüssel für HCP Terraform, gilt für ALLE Steps
+    # in Job 3 (init, apply, output). State liegt in 02-CI-CO-VM.
+    # =============================================================
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
 
     # =============================================================
     # OUTPUTS: IP-Adressen für nachfolgende Jobs 
@@ -302,7 +308,7 @@ jobs:
           if [ -n "${{ steps.effective-template.outputs.template_id }}" ]; then
             export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id }}"
           fi
-          terraform init
+          terraform init -input=false
         env:
           TF_VAR_pm_api_url: ${{ secrets.PROXMOX_URL }}
           TF_VAR_pm_api_token_id: ${{ secrets.TF_VAR_PM_API_TOKEN_ID }}
