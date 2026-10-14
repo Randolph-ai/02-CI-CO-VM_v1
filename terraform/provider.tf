@@ -12,7 +12,8 @@
 # ============================================================
 # TERRAFORM PROVIDER KONFIGURATION - PROXMOX
 # ============================================================
-# DATUM:         2026-06-29  (Update)
+# ERSTELLT AM DATUM:  29.06.2026 
+# LETZTE ÄNDERUNG AM: 14.10.2026 - Phase 3: cloud-Block, State in HCP Terraform
 # VERSION:       2.0.0
 # ÄNDERUNGEN:
 #   - Provider: 0.74.1 → 0.111.0
@@ -31,6 +32,17 @@ terraform {
       # aber KEINE neue Major-Version (also kein 1.x.x)"
       # Das schützt vor Breaking Changes bei großen Updates.
       version = "~> 0.111.0"
+    }
+  }
+
+  # NEU (Phase 3): State liegt in HCP Terraform statt lokal auf dem Runner.
+  # Der Token steht NICHT hier, sondern kommt aus der Umgebung
+  # (Pipeline: Secret TF_API_TOKEN, Terminal: terraform login).
+  cloud {
+    organization = "randolph-iacdeveloping"
+
+    workspaces {
+      name = "02-CI-CO-VM"
     }
   }
 }
