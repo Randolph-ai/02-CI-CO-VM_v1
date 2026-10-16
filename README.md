@@ -60,6 +60,7 @@ Inventar, Vault, Compliance-Doku) findest du unter
 |------|---------|-------|
 | Packer | 1.9+ (Proxmox-Plugin gepinnt auf `1.1.8`) | Template-Erstellung |
 | Terraform | 1.5+ | Infrastructure Provisioning |
+| HCP Terraform | Free-Tarif | Zentraler Speicher für den Terraform-State (versioniert, mit Locking) – seit Phase 3 |
 | Checkov | 3.3.6 | Policy-as-Code Security-Scanning (Terraform- und Ansible-Framework) |
 | Ansible | 2.14+ | Configuration Management |
 | PostgreSQL | 14 (Ubuntu-22.04-Standardversion) | Datenbank auf dem DB-Server |
@@ -84,7 +85,7 @@ Inventar, Vault, Compliance-Doku) findest du unter
 
 ### Terraform
 - **`terraform/main.tf`** - VM-Definitionen: `web_server` und `db_server`
-- **`terraform/provider.tf`** - Provider & API-Konfiguration
+- **`terraform/provider.tf`** - Provider & API-Konfiguration, dazu der `cloud`-Block (Speicherort des States in HCP Terraform, seit Phase 3)
 - **`terraform/variables.tf`** - Variablendeklaration (getrennte Abschnitte je VM)
 - **`terraform/outputs.tf`** - Ausgaben für Ansible (`vm_ip`, `db_server_ip`, u. a.)
 - **`terraform/checks/`** - Custom Checkov Security Checks (`CKV_PROXMOX_1/2/3`)
@@ -119,11 +120,16 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 - Proxmox VE Host, erreichbar über die API (`https://<proxmox-ip>:8006/api2/json`)
 - Self-hosted GitHub Actions Runner, registriert mit den Labels `self-hosted` **und** `proxmox` (ohne exaktes Label-Match hängt der Job endlos in der Warteschlange, ohne Fehlermeldung)
 - Auf dem Runner installiert: Packer, Terraform, Ansible, Checkov (>= 3.3.6)
+- HCP Terraform (Free-Tarif) als zentraler Speicher für den Terraform-State (seit Phase 3):
+  - Organisation `randolph-iacdeveloping`, Workspace `02-CI-CO-VM`
+  - Workflow **CLI-driven**, Execution Mode **Local** (Plan/Apply laufen auf dem Runner, HCP speichert nur den State – HCP-Server würden Proxmox im Heimnetz nicht erreichen)
+  - Remote State Sharing: **keiner** (der State kann sensible Werte enthalten)
 - GitHub Secrets gesetzt:
   - `PROXMOX_URL`, `PACKER_TOKEN_ID`, `PACKER_TOKEN_SECRET` (für Packer, API-Token-Auth)
   - `TF_VAR_*`-Secrets passend zu den in `variables.tf` deklarierten Variablen
   - `SSH_PRIVATE_KEY` (dauerhafter Produktiv-Key, User `ansible` – siehe [`docs/authentication.md`](docs/authentication.md))
   - `SSH_PUBLIC_KEY` (öffentlicher Gegenpart, als `TF_VAR_ssh_public_key` an Terraform übergeben)
+  - `TF_API_TOKEN` (HCP-Terraform-**Team**-Token, wird in Job 3 als `TF_TOKEN_app_terraform_io` bereitgestellt – siehe [Konfiguration](#-konfiguration))
 - Eine bereits existierende Cloud-Image-Basis-VM (Template, standardmäßig VM-ID `9000`) als Klon-Quelle für Packer
 
 ## 🔧 Installation & Setup
@@ -138,9 +144,10 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 3. Zwei Terraform-Variablen-Dateien anlegen:
    - `terraform/terraform.tfvars` (unkritische Werte: Netzwerk, IPs, Disk-Größe, `template_vm_id`) aus `terraform.tfvars.example`
    - `terraform/secrets.auto.tfvars` (nur die drei Proxmox-Auth-Werte: `pm_api_url`, `pm_api_token_id`, `pm_api_token_secret`) – wird von Terraform automatisch geladen, `.gitignore`-geschützt
-4. GitHub Secrets im Repo hinterlegen (siehe Voraussetzungen)
-5. Self-hosted Runner registrieren und mit dem Label `proxmox` versehen
-6. Push auf `main` (oder Pull Request) startet die Pipeline automatisch
+4. HCP Terraform einrichten (siehe Voraussetzungen): Workspace anlegen, Execution Mode **Local**, Team-Token erzeugen. Existiert bereits ein lokaler State, wird er **einmalig** nach HCP umgezogen – erst sichern, dann `terraform init` im Ordner mit State und `cloud`-Block, Rückfrage mit `yes` beantworten (Details: [Konfiguration](#-konfiguration))
+5. GitHub Secrets im Repo hinterlegen (siehe Voraussetzungen)
+6. Self-hosted Runner registrieren und mit dem Label `proxmox` versehen
+7. Push auf `main` (oder Pull Request) startet die Pipeline automatisch
 
 ## ▶️ Nutzung
 
@@ -159,7 +166,7 @@ configure-vm            → Ansible konfiguriert Nginx und PostgreSQL
 
 Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden die folgenden drei Jobs gar nicht erst gestartet ("Skipped", 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate).
 
-Nach einem erfolgreichen Lauf sind beide VMs über ihre von Terraform ausgegebenen IPs erreichbar (`terraform output -raw vm_ip` bzw. `terraform output -raw db_server_ip`).
+Nach einem erfolgreichen Lauf sind beide VMs über ihre von Terraform ausgegebenen IPs erreichbar (`terraform output -raw vm_ip` bzw. `terraform output -raw db_server_ip`). Da der State seit Phase 3 in HCP Terraform liegt, braucht dafür auch ein manueller Aufruf im Terminal eine Anmeldung (`terraform login`) und einen Ordner mit `cloud`-Block nach `terraform init`.
 
 ## 🔩 Konfiguration
 
@@ -170,6 +177,24 @@ Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
 - `db_server_cores`, `db_server_memory` – Ressourcengröße des DB-Servers
 
 Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstanten hinterlegt (z. B. `MIN_DISK_SIZE_GB` in `ProxmoxDiskMemorySet.py`) und bei Bedarf dort anpassbar.
+
+### Terraform-State in HCP Terraform (Phase 3)
+
+Der State liegt nicht mehr als Datei `terraform.tfstate` im Arbeitsordner des Runners, sondern zentral in HCP Terraform. Damit ist er **zentral**, **versioniert** (jede Fassung mit Zeitpunkt und Auslöser, Änderungen als Vergleich) und **gesperrt** (Locking: ein zweiter gleichzeitiger Lauf wird mit `Error acquiring the state lock` abgewiesen).
+
+Drei Zutaten machen den Zugriff aus:
+
+| Zutat | Wo | Inhalt |
+|---|---|---|
+| **Adresse** | `terraform/provider.tf`, `cloud`-Block im `terraform`-Block | Organisation `randolph-iacdeveloping`, Workspace `02-CI-CO-VM` (keine Geheimnisse, darf ins Repo) |
+| **Schlüssel** | Pipeline: Job 3 `deploy-vm`, `env:` im Job-Kopf | `TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}` – gilt für alle Terraform-Befehle des Jobs (`init`, `plan`, `apply`, `output`) |
+| **Auslöser** | `terraform init` | verbindet sich mit dem Workspace; in der Pipeline mit `-input=false`, damit ein Lauf bei einer unerwarteten Rückfrage abbricht statt zu hängen |
+
+Der Token steht **nie** im Code. `TF_TOKEN_` ist ein von Terraform vorgegebener Namensanfang, danach folgt die Adresse des Dienstes (`app.terraform.io`, Punkte durch `_` ersetzt). Für manuelle Arbeit im Terminal gilt stattdessen ein persönlicher Token aus `terraform login` (gespeichert in `~/.terraform.d/credentials.tfrc.json`).
+
+**Hinweis zum Umzug:** Beim Umzug eines bestehenden States vergibt HCP Terraform eine neue `lineage` und beginnt mit `serial` 1 – der Inhalt (Ressourcen, Outputs) bleibt gleich. Eine Sicherheitskopie des alten lokalen States wird vor dem Umzug außerhalb von Repo und Runner-Ordner abgelegt.
+
+**Backup / Exit-Strategie (geplant):** Regelmäßige Kopie des aktuellen States per `terraform state pull`, verschlüsselt und außerhalb des Repos – damit der State auch bei Ausfall des Anbieters oder Kontoverlust wiederherstellbar bleibt (`terraform state push` im Notfall).
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
@@ -183,6 +208,7 @@ Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstant
 | `E: Could not get lock /var/lib/apt/lists/lock` im Packer-Build | Cloud-Init läuft beim ersten Boot noch, blockiert `apt`-Lock | `sudo cloud-init status --wait` als erste Zeile im `shell`-Provisioner |
 | `config file already exists` beim Terraform-`apply`, obwohl Plan `X to add` zeigt | State-Drift: lokal getesteter State kennt eine VM, die im Runner-eigenen State nicht existiert | Betroffene VM einmalig löschen (`qm destroy <id>`), Pipeline im Runner-Kontext neu bauen lassen. Strukturelle Lösung: zentrales State-Backend (Phase 3) |
 | Terraform will VM erneut anlegen, obwohl sie läuft | `terraform.tfstate` ging beim Checkout verloren (self-hosted Runner mit geteiltem Arbeitsordner) | `clean: false` bei **allen** `actions/checkout`-Schritten setzen |
+| `Error acquiring the state lock`, obwohl kein anderer Lauf aktiv scheint | Hängender Lock: ein früherer Lauf wurde abgebrochen (Absturz, Runner-Neustart) und konnte die Sperre in HCP Terraform nicht mehr freigeben | Erst **prüfen**, ob wirklich kein Lauf mehr aktiv ist (GitHub Actions, auf dem Runner `pgrep -a terraform`), dann in HCP Terraform unter Workspace → Settings → Locking entsperren, Gegenprobe mit `terraform plan`. Hinweis: Die „Lock Info“ in der Fehlermeldung beschreibt den **eigenen** Versuch, nicht den Halter der Sperre |
 | Dienst von einer anderen VM aus nicht erreichbar (`Connection refused`), obwohl Firewall-Regel korrekt ist | Dienst lauscht per Default nur auf `localhost` | Netzwerk-Lauschen (z. B. `listen_addresses` bei PostgreSQL) anpassen, siehe [`docs/db-server-architecture.md`](docs/db-server-architecture.md) |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` bei SSH | VM wurde unter gleicher IP neu aufgebaut, neuer Host-Key | `ssh-keygen -f ~/.ssh/known_hosts -R '<ip>'` |
 | Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check | Ohne `--check`-Filter testen |
@@ -200,6 +226,8 @@ Transparent dokumentiert statt verschwiegen, analog zum `checkov:skip`-Prinzip:
 **Ports 80/443 im Golden Image gelten für jede geklonte VM, unabhängig von der Rolle.** Der Packer-Provisioner öffnet UFW-Ports 22/80/443 einmalig im Template (Phase 2B). Für den DB-Server sind das zwei unnötig offene Ports (Verstoß gegen minimale Angriffsfläche) – noch keine Entscheidung getroffen, ob die Ports generell aus dem Template entfernt werden oder rollenspezifische VMs sie aktiv wieder schließen. Details: [`docs/cis-hardening.md`](docs/cis-hardening.md).
 
 **Nginx-Healthcheck läuft bewusst über HTTP, nicht HTTPS.** Der Ansible-Task `Prüfen ob Nginx auf Port 80 antwortet` löst `CKV2_ANSIBLE_1` ("Ensure that HTTPS url is used with uri") im Soft-Gate `ansible-security-scan` aus – TLS ist für den Webserver aktuell nicht eingerichtet, der Check auf Port 80 ist beabsichtigt. Der Job scheitert dadurch reproduzierbar mit Exit-Code 1, `configure-vm` läuft trotzdem an (Soft-Gate-Prinzip). Keine Entscheidung getroffen, ob künftig TLS eingeführt oder der Check gezielt per `checkov:skip` unterdrückt wird.
+
+**Der Pipeline-Token für HCP Terraform hat mehr Rechte als nötig.** Im Free-Tarif gibt es nur das Team `owners`; der Team-Token in `TF_API_TOKEN` hat damit volle Rechte in der Organisation, nicht nur auf den Workspace `02-CI-CO-VM` (Verstoß gegen Least Privilege). Im Betrieb würde man ein eigenes Team mit Rechten nur auf diesen Workspace anlegen. Der Token läuft nach 90 Tagen ab (**12.01.2027**) und muss rechtzeitig erneuert und im Secret ersetzt werden (Rotation).
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
