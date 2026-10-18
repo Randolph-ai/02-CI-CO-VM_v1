@@ -45,8 +45,9 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 - **Phase 2A** – Statisches Security-Gate (Checkov) in die Pipeline integriert *(abgeschlossen)*
 - **Phase 2B** – CIS-Härtung des Packer-Golden-Images *(abgeschlossen)*
 - **Phase 2C** – Zweite VM (DB-Server, PostgreSQL) aus dem gehärteten Image, inkl. Netzwerkzugriffskonfiguration Web-Server → DB-Server *(abgeschlossen)*
+- **Phase 3** – Terraform-State zentral in HCP Terraform (Free-Tarif, Workspace `02-CI-CO-VM`) mit State-Locking; die Pipeline meldet sich per Team-Token an *(abgeschlossen)*
 
-Die Reise geht danach weiter – Phasen 3 bis 6 (State-Backend, Dynamisches
+Die Reise geht danach weiter – Phasen 4 bis 6 (Dynamisches
 Inventar, Vault, Compliance-Doku) findest du unter
 [🗺️ Roadmap: Was als Nächstes kommt](#️-roadmap-was-als-nächstes-kommt).
 
@@ -235,11 +236,10 @@ Transparent dokumentiert statt verschwiegen, analog zum `checkov:skip`-Prinzip:
 
 ## 🗺️ Roadmap: Was als Nächstes kommt
 
-Nach Abschluss der Phasen 2A–2C folgen weitere, aufeinander aufbauende Ausbaustufen Richtung Enterprise-Reife:
+Nach Abschluss der Phasen 2A–3 folgen weitere, aufeinander aufbauende Ausbaustufen Richtung Enterprise-Reife:
 
 | Phase | Thema | Kernidee |
 |---|---|---|
-| **3** | State-Backend | Zentrales, gesperrtes Terraform-State-Backend statt lokaler `.tfstate`-Datei – verhindert State-Drift zwischen verschiedenen Ausführungsorten |
 | **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen |
 | **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten |
 | **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch |
