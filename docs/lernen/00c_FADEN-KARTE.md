@@ -2,9 +2,20 @@
 
 **Zweck:** Den Faden am Sessionanfang in 5 Minuten wiederfinden. Diese Seite
 ändert sich selten. Sie zeigt **immer dieselbe Geschichte**: Wie die Nummer
-des Bauplans (Template-ID) durch die Pipeline wandert.
+des Bauplans (Template-ID) durch die Pipeline wandert. Seit 16.10. kommt
+**Teil D** dazu: Phase 3 – wo der State liegt und was `terraform init` tut.
+Seit 18.10. **Teil E**: der Weg der Schlüssel (Tresor → Schlüssel → Tür).
+
+**Was auf dieser Karte steht – und was nicht:**
+
+| Hier (Faden-Karte) | Nicht hier |
+|---|---|
+| Wie die Pipeline **dauerhaft** funktioniert – was bei **jedem** Lauf gilt | **Einmalige** Schritte: Umzug, Aufräumen, PR vorbereiten und prüfen |
+| Beispiel: was `terraform init` tut, wo der State liegt | Beispiel: alte `terraform.tfstate` vor dem PR wegräumen |
+| → zum Lernen und Wiederholen | → steht in `01_aktueller_stand.md` (Plan, offene Punkte) und in der **Session-Zusammenfassung** des Tages (Ablauf) |
 
 **So benutzt du sie am Sessionanfang:**
+
 1. Teil A (Landkarte) kurz anschauen – wo bin ich?
 2. Teil B von oben nach unten lesen, **jede Zeile von rechts nach links**.
 3. Teil C: Claude stellt **eine** Einstiegsfrage, du antwortest mit der Karte
@@ -28,7 +39,11 @@ Ein **Haus** ist eine VM (z. B. 1001 `web_server`, 100 `test_vm`).
 Überschriften **ohne** Kreis-Nummer sind **Zwischenschritte**: Dort passiert
 etwas, das die 2000 weiterbringt, aber sie wird dort nicht abgelegt.
 
-Zeilennummern: `pipeline.yml`, Stand 10.10.2026 (von Randolph eingefügt).
+Zeilennummern: `pipeline.yml`, Stand 10.10.2026, **lokale Fassung** auf
+`soar-dev-server` (mit noch nicht gepushten Kommentaren, geparkt für den
+Kommentar-PR). **Auf GitHub** (damit läuft die Pipeline heute) liegt alles ab
+Job 3 Step 2 um **+1 bis +2** Zeilen weiter unten: z. B. `apply` 341,
+④ 361, ⑤ 382. Nach dem Kommentar-PR gelten die Nummern auf dieser Karte.
 
 ---
 
@@ -68,8 +83,10 @@ Danach: Schaufenster im Job-Kopf (Z. 256) → Job 6.
 ---
 
 ### ① Station 1 – Herkunft: `variables.tf`
+
 **Hier steht die 2000 als Ersatzwert.**
 (vereinfacht in einer Zeile, in der Datei mehrzeilig)
+
 ```
 variable "test_template_id"   { default = 2000 }
 └──┬───┘ └───────┬────────┘   └──┬──┘   └┬─┘
@@ -84,7 +101,9 @@ variable "test_template_id"   { default = 2000 }
 | 4 | `2000` | **du** | der Ersatzwert selbst |
 
 ### Zwischenschritt – Job 3 Step 6, Z. 336/337: Zettel hinlegen (oder nicht)
+
 **Entscheidet, ob Terraform die 2000 nimmt oder einen anderen Wert.**
+
 ```
 export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id }}"
 └─┬──┘ └──┬──┘└──────┬───────┘↑ └────────────────────────┬────────────────────────┘
@@ -100,6 +119,7 @@ export TF_VAR_test_template_id="${{ steps.effective-template.outputs.template_id
 | 5 | `${{ … }}` | **GitHub** setzt es **vor** dem Start ein | der Wert: Auftrag aus Step 2 |
 
 **Nr. 5 genauer zerlegt:**
+
 ```
 ${{ steps.effective-template.outputs.template_id }}
     └─┬─┘ └────────┬───────┘ └──┬──┘ └────┬────┘
@@ -117,7 +137,9 @@ Fall 2: Der Auftrag ist leer → `if` in Z. 336 ist falsch → **Z. 337 wird
 übersprungen** → **kein Zettel** → Terraform nimmt die 2000 aus **①**.
 
 ### Zwischenschritt – Job 3 Step 6, Z. 339: Terraform baut und schreibt
+
 **Hier wird die 2000 benutzt (Klonen) und nach Anweisung ② in den State ③ geschrieben.**
+
 ```
 terraform apply -auto-approve
 └───┬───┘ └─┬─┘ └─────┬─────┘
@@ -131,6 +153,7 @@ terraform apply -auto-approve
 | 3 | `-auto-approve` | Schalter von **Terraform** | ohne Rückfrage „Wirklich?“ |
 
 **Was Terraform bei `apply` tut, der Reihe nach:**
+
 1. liest den **Code** (alle `.tf`-Dateien) → was es geben **soll**
 2. setzt den **Lock** auf den State
 3. liest den **State** → was es **weiß**
@@ -141,8 +164,10 @@ terraform apply -auto-approve
 8. entfernt den Lock
 
 ### ② Station 2 – Anweisung: `outputs.tf`
+
 **Hier steht, dass die 2000 nach dem `apply` in den State soll.**
 (Du hast das vorher geschrieben; ausgeführt wird es bei Z. 339.)
+
 ```
 output "used_test_template_id"   { value = var.test_template_id }
 └─┬──┘ └──────────┬──────────┘   └─┬─┘   └┬┘ └──────┬───────┘
@@ -161,6 +186,7 @@ output "used_test_template_id"   { value = var.test_template_id }
 `apply` aus.
 
 ### ③ Station 3 – Ablage: der State (`terraform.tfstate`)
+
 **Hier liegt die 2000 nach dem `apply`.**
 
 | Name | Wert |
@@ -168,9 +194,12 @@ output "used_test_template_id"   { value = var.test_template_id }
 | `used_test_template_id` | `2000` |
 
 (Am 09.10. im echten State auf `soar-dev-server` per `grep` gesehen.)
+Seit Phase 3 liegt der State **bei HCP** statt im Runner-Ordner → Teil D.
 
 ### ④ Station 4 – Abholen: Job 3 Step 7, Z. 359
+
 **Hier wird die 2000 aus dem State gelesen.**
+
 ```
 USED_TEMPLATE_ID=$(terraform output -raw used_test_template_id 2>/dev/null)
 └──────┬───────┘└┬┘└───┬───┘ └─┬──┘ └┬─┘ └─────────┬─────────┘ └────┬─────┘
@@ -191,7 +220,9 @@ Zwei fast gleiche Namen: **1 GROSS** = Bash-Variable, **6 klein** = Name im
 State.
 
 ### ⑤ Station 5 – Weitergeben: Job 3 Step 7, Z. 380
+
 **Hier geht die 2000 in die Übergabe-Datei.**
+
 ```
 echo  "used_template_id=$USED_TEMPLATE_ID"  >> $GITHUB_OUTPUT
 └┬─┘  └──────┬───────┘↑└───────┬────────┘  ↑  └──────┬──────┘
@@ -211,7 +242,9 @@ echo  "used_template_id=$USED_TEMPLATE_ID"  >> $GITHUB_OUTPUT
 `echo`; in der Datei ist es eins.)
 
 ### Zwischenschritt – Job 3 Job-Kopf, Z. 256: ins Schaufenster stellen
+
 **Macht die 2000 aus ⑤ für Job 6 sichtbar.**
+
 ```
 effective_template_id: ${{ steps.get-ip.outputs.used_template_id }}
 └─────────┬─────────┘↑ └┬┘ └─┬─┘ └─┬──┘ └──┬──┘ └──────┬───────┘
@@ -232,8 +265,10 @@ Job 6 liest es mit `needs.deploy-vm.outputs.effective_template_id`
 (Z. 616, 625, 629).
 
 ### Die ganze Kette in einer Zeile
+
 ```
-① variables.tf (2000) → kein Zettel → apply → ② Anweisung → ③ State → ④ abholen → ⑤ weitergeben → Schaufenster → Job 6
+① variables.tf (2000) → kein Zettel → apply → ② Anweisung → ③ State
+  → ④ abholen → ⑤ weitergeben → Schaufenster → Job 6
 ```
 
 ---
@@ -249,12 +284,169 @@ Job 6 liest es mit `needs.deploy-vm.outputs.effective_template_id`
    mit dem State?
 7. (neu 10.10.) Nenne zu jeder Station ①–⑤ in einem Wort, was sie
    verkörpert.
+8. (neu 16.10.) Was holt `terraform init`, und **wo** legt es das ab?
+9. (neu 16.10.) Code, Proxmox, State, Provider – wer ist Soll, Ist, Notiz,
+   Übersetzer?
+10. (neu 16.10.) Ist HCP ein Provider? Wenn nicht – was dann?
+11. (neu 18.10.) Tresor, Schlüssel, Tür: Was ist GitHub Secrets, was ist
+    `TF_API_TOKEN`, was ist HCP?
+12. (neu 18.10.) Mit welchem HCP-Token meldet sich Terraform an – in der
+    **Pipeline** und im **Terminal**? Wo liegt er jeweils?
+
+---
+
+## Teil D – Phase 3: Wo liegt der State, und was tut `init`? (seit 16.10.)
+
+### D1 – Die vier Teile
+
+| Teil | Rolle | Wo |
+|---|---|---|
+| Code (`.tf`-Dateien) | **Soll** – was es geben soll | Repo, Ordner `terraform/` |
+| Proxmox | **Ist** – was wirklich steht | Minisforum im Heimnetz |
+| State | **Notiz** – was Terraform weiß | **bei HCP**, Workspace `02-CI-CO-VM` |
+| Provider `bpg/proxmox` | **Übersetzer** Terraform ↔ Proxmox | `terraform/.terraform/providers/` |
+
+```
+Terraform → Plugin bpg/proxmox → Proxmox-API (Port 8006)
+```
+
+### D2 – Drei Zutaten, damit Terraform den State bei HCP findet
+
+| Zutat | Wo | Wofür |
+|---|---|---|
+| **Adresse** | `provider.tf`, `cloud`-Block (Z. 41–47): Organisation `randolph-iacdeveloping`, Workspace `02-CI-CO-VM` | **wohin** |
+| **Schlüssel** | Pipeline: Secret `TF_API_TOKEN` → Job 3 Job-Kopf `env:` `TF_TOKEN_app_terraform_io`; Terminal: `terraform login` | **darf rein** |
+| **Ablage** | HCP-Workspace, Execution Mode **Local** | **wo** die Notiz liegt |
+
+**Local** = Terraform läuft weiter auf dem Runner (redet mit Proxmox im
+Heimnetz), HCP hält nur **State + Lock**. Verbindung: Terraform → HTTPS →
+`app.terraform.io`, **nur von innen nach außen**, kein offener Port zu Hause.
+
+### D3 – `terraform init` (Job 3, auf dem Branch Z. 311)
+
+```
+terraform init -input=false
+└───┬───┘ └┬─┘ └─────┬────┘
+    1      2         3
+```
+
+| Nr | Teil | Wer bestimmt das? | Bedeutung |
+|---|---|---|---|
+| 1 | `terraform` | das **Programm** auf dem Runner | Terraform wird gestartet |
+| 2 | `init` | festes Wort von **Terraform** | „Ordner vorbereiten: Plugin holen, State-Adresse einrichten“ |
+| 3 | `-input=false` | Schalter von **Terraform** | keine Rückfragen – kommt eine, **bricht** `init` ab |
+
+**Was `init` tut, der Reihe nach:**
+
+| # | Terraform … | mit wem |
+|---|---|---|
+| 1 | liest `provider.tf`, findet den `cloud`-Block (Adresse) | lokal |
+| 2 | sucht den Schlüssel (`TF_TOKEN_app_terraform_io` bzw. `terraform login`) | lokal |
+| 3 | meldet sich bei `app.terraform.io` an, prüft Organisation + Workspace | HCP |
+| 4 | lädt das **Plugin** `bpg/proxmox` (oder nimmt es aus dem Zwischenspeicher) | Terraform Registry |
+| 5 | merkt sich die Adresse in `.terraform/` | lokal |
+
+### D4 – Was liegt wo im Ordner `terraform/`?
+
+```
+terraform/
+├── provider.tf           ← du: cloud-Block (Adresse) + required_providers
+├── .terraform.lock.hcl   ← init: genaue Plugin-Version
+└── .terraform/           ← init legt den Ordner an
+    ├── providers/        ← das Plugin bpg/proxmox (ein eigenes Programm)
+    └── terraform.tfstate ← NUR die Adressnotiz „State liegt bei HCP“
+                            – NICHT der State
+```
+
+Jeder Ordner, in dem Terraform laufen soll, braucht **einmal** `init`.
+
+### D5 – Typische Verwechslungen
+
+| Falsch | Richtig |
+|---|---|
+| HCP ist der Provider | HCP = **Ablage** (`cloud`-Block, *wo* notiert wird); Provider = Plugin, *mit wem* gebaut wird |
+| `init` holt die Proxmox-API | `init` holt das **Plugin**, das **mit** der API spricht; die API bleibt auf dem Proxmox-Server |
+| Das Plugin steckt in Terraform | Es liegt **neben** dem Projekt in `.terraform/providers/` |
+| `.terraform/terraform.tfstate` ist der State | nur die Adressnotiz; der State liegt bei HCP |
+| Die `.gitignore` ist ein Ablageort | sie hält Dateien nur **aus Git heraus** |
+
+---
+
+## Teil E – Der Weg der Schlüssel: Tresor → Schlüssel → Tür (seit 18.10.)
+
+**Grundbild:** Jede API ist eine **Tür**, jede Tür braucht ihren **eigenen
+Schlüssel** (Token). HCP ist auch nur eine API (`app.terraform.io`), genau wie
+Proxmox (Port 8006). **GitHub Secrets ist kein Schlüssel, sondern der Tresor.**
+
+### E1 – Pipeline: wer bekommt welchen Schlüssel für welche Tür?
+
+```
+                 ┌──────── GitHub Secrets (TRESOR) ────────┐
+                 │  TF_API_TOKEN   PACKER_TOKEN_…   …       │
+                 └─────────────┬───────────────────────────┘
+                               │ GitHub holt beim Lauf den passenden Schlüssel raus
+                               ▼
+   Schlüssel                  Wer benutzt ihn        Tür (API)
+   ─────────────────────────  ───────────────────    ─────────────────────
+   TF_API_TOKEN (Team)    →   Terraform          →   HCP  (app.terraform.io)
+   PACKER_TOKEN_…         →   Packer             →   Proxmox-API (8006)
+   TF_VAR_PM_API_TOKEN_…  →   Provider bpg       →   Proxmox-API (8006)
+   PROMOTION_TOKEN_…      →   curl (Job 6)       →   Proxmox-API (8006)
+   GITHUB_TOKEN           →   Checkout, Job 6    →   GitHub (dein Repo)
+```
+
+`GITHUB_TOKEN` liegt **nicht** im Tresor: GitHub erzeugt ihn bei jedem Lauf
+automatisch und nimmt ihn danach wieder weg („Post Repository auschecken“).
+
+Dazu ein Schlüssel**paar** für SSH (keine API, aber auch eine Tür):
+`SSH_PUBLIC_KEY` → Job 3 baut das **Schloss** in die VM ein ·
+`SSH_PRIVATE_KEY` → Job 5, **Ansible** öffnet damit die VM.
+
+**Drei verschiedene Proxmox-Tokens** (Packer, Terraform, Job 6) = jeder Job
+hat seine **eigene Keycard** → Prinzip **minimale Rechte**.
+
+### E2 – Zwei Arten, einen Schlüssel an Terraform zu geben
+
+| Anfang | Wer liest ihn | Wohin geht der Wert |
+|---|---|---|
+| `TF_TOKEN_…` | **Terraform selbst** (Programm) | Anmeldung bei HCP – **nicht** in deinen Code |
+| `TF_VAR_…` | **dein Code** | wird zu `var.…` in `variables.tf`, z. B. Keycard für den Provider |
+
+| Ebene in `pipeline.yml` | Einrückung | gilt für |
+|---|---|---|
+| `env:` im **Job-Kopf** (z. B. `TF_TOKEN_app_terraform_io`) | 6 Leerzeichen | **alle Steps** des Jobs |
+| `env:` in einem **Step** (z. B. `TF_VAR_pm_api_url`) | 10 Leerzeichen | **nur diesen Step** |
+
+**Ablauf:** ① **GitHub** holt vor dem Job-Start den Wert aus dem Tresor und
+legt ihn als Umgebungsvariable hin. ② **Terraform** liest die Adresse im
+`cloud`-Block und sucht **gezielt** den passenden Schlüssel – es kennt den
+Tresor-Namen `TF_API_TOKEN` gar nicht.
+
+### E3 – Welcher HCP-Token wann?
+
+| Situation | HCP-Token | Art in HCP | Wo liegt er | Wie findet Terraform ihn |
+|---|---|---|---|---|
+| **Pipeline** (Job 3) | `pipeline-02-CI-CO-VM` | **Team-Token** | GitHub Secret `TF_API_TOKEN` | Umgebungsvariable `TF_TOKEN_app_terraform_io` |
+| **Terminal** (z. B. `~/umzug-02`) | `soar-dev-server-uebung` | **User-Token** | `~/.terraform.d/credentials.tfrc.json` | gespeichert von `terraform login` |
+
+Terraform meldet sich bei **jedem** Befehl an, der den State braucht: `init`,
+`plan`, `apply`, `state pull`, `state list`, `output`. Reihenfolge: zuerst
+`TF_TOKEN_app_terraform_io`, sonst die Datei.
+
+**Röntgen-Befehl für jede Pipeline:**
+`grep -n "secrets\." pipeline.yml` zeigt alle Stellen, an denen ein Schlüssel
+aus dem Tresor eingesetzt wird (nur Namen, nie Werte).
 
 ---
 
 *Pflege: Nur ändern, wenn sich die Pipeline an diesen Stellen ändert (z. B.
 nach der geplanten Umbenennung von `effective_template_id`) oder ein
-grundlegend neuer Faden dazukommt (z. B. Phase 3 – dann eigener Teil D).
-Letzte Änderung: 10.10.2026 – Klammern mit Nummern + Tabellen, Stationen
-①–⑤ mit Bedeutung, Zeilennummern nach `pipeline.yml` vom 10.10.,
-„Grundbuch“ → State.*
+grundlegend neuer Faden dazukommt. **Regel (16.10.):** In die Faden-Karte
+kommt nur, was **dauerhaft** bei jedem Lauf gilt. Einmalige Schritte (Umzug,
+Aufräumen, PR vorbereiten/prüfen) gehören in `01` und die
+Session-Zusammenfassung. Letzte Änderung: 18.10.2026 – Teil E (Weg der
+Schlüssel: Tresor/Schlüssel/Tür, `TF_TOKEN_` vs. `TF_VAR_`, Job-Kopf vs.
+Step, Team- vs. User-Token), Einstiegsfragen 11–12. Davor 16.10.2026 – Teil D
+(Phase 3: vier Teile, drei Zutaten, `init`, Ordner `terraform/`,
+Verwechslungen), Einstiegsfragen 8–10. Davor 10.10.2026: Klammern mit
+Nummern + Tabellen, Stationen ①–⑤, „Grundbuch“ → State.*
