@@ -31,4 +31,4 @@ insecure = true
 `CKV_PROXMOX_1`, `CKV_PROXMOX_3` und `CKV_ANSIBLE_CUSTOM_1` sind aktuell ungeskippt und müssen PASSED liefern, damit das jeweilige Gate grün wird (beim Ansible-Check nur im Sinne des Reports, da Soft-Gate).
 
 ---
-[← Zurück zur README](../README.md)
+[← Zurück zur Roadmap](../README.md#️-roadmap-stand-und-nächste-schritte) · [← Zurück zu den Architektur-Vertiefungen](../README.md#-architektur-vertiefungen)

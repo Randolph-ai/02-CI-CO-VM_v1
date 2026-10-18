@@ -15,4 +15,4 @@ Jede Maßnahme ist über einen vollständigen Packer-Build plus Verifikation geg
 > **Hinweis:** Die im Template global erlaubten Ports 80/443 gelten für **jede** aus diesem Image geklonte VM, unabhängig von deren späterer Rolle. Für den DB-Server ist das aktuell unnötig offen – siehe [Bekannte technische Schuld](../README.md#-bekannte-technische-schuld-offen) in der README.
 
 ---
-[← Zurück zur README](../README.md)
+[← Zurück zur Roadmap](../README.md#️-roadmap-stand-und-nächste-schritte) · [← Zurück zu den Architektur-Vertiefungen](../README.md#-architektur-vertiefungen)

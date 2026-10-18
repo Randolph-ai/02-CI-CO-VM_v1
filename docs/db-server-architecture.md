@@ -23,4 +23,4 @@ Alle drei sind bewusst auf die Web-Server-IP (`10.0.30.101/32`) beschränkt (Def
 Kein eigener Datenbank-User, keine eigene Datenbank, keine differenzierten Zugriffsrechte – nur die PostgreSQL-Instanz selbst läuft und ist für den Web-Server erreichbar.
 
 ---
-[← Zurück zur README](../README.md)
+[← Zurück zur Roadmap](../README.md#️-roadmap-stand-und-nächste-schritte) · [← Zurück zu den Architektur-Vertiefungen](../README.md#-architektur-vertiefungen)
