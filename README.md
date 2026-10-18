@@ -21,7 +21,7 @@
 - [Konfiguration](#-konfiguration)
 - [Fehlerbehebung](#-fehlerbehebung)
 - [Bekannte technische Schuld](#️-bekannte-technische-schuld-offen)
-- [Roadmap - Was als nächstes kommt](#️-roadmap-was-als-nächstes-kommt)
+- [Roadmap - Stand und nächste Schritte](#️-roadmap-stand-und-nächste-schritte)
 - [Zukunftsausblick](#-zukunftsausblick-ai-driven-siem--monitoring)
 
 ---
@@ -49,7 +49,7 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 
 Die Reise geht danach weiter – Phasen 4 bis 6 (Dynamisches
 Inventar, Vault, Compliance-Doku) findest du unter
-[🗺️ Roadmap: Was als Nächstes kommt](#️-roadmap-was-als-nächstes-kommt).
+[🗺️ Roadmap: Stand und nächste Schritte](#️-roadmap-stand-und-nächste-schritte).
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
@@ -234,15 +234,19 @@ Transparent dokumentiert statt verschwiegen, analog zum `checkov:skip`-Prinzip:
 
 ---
 
-## 🗺️ Roadmap: Was als Nächstes kommt
+## 🗺️ Roadmap: Stand und nächste Schritte
 
-Nach Abschluss der Phasen 2A–3 folgen weitere, aufeinander aufbauende Ausbaustufen Richtung Enterprise-Reife:
+Das Projekt wächst in aufeinander aufbauenden Phasen Richtung Enterprise-Reife. Die Tabelle zeigt den ganzen Weg: was abgeschlossen ist, was als Nächstes kommt und was geplant ist.
 
-| Phase | Thema | Kernidee |
-|---|---|---|
-| **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen |
-| **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten |
-| **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch |
+| Phase | Thema | Kernidee | Status |
+|---|---|---|---|
+| **2A** | Security-Gate (Checkov) | Statische IaC-Analyse **vor** dem Deploy: hartes Gate für Terraform, weiches Gate für Ansible, eigene Custom Checks – Details: [`docs/security-gates.md`](docs/security-gates.md) | ✅ abgeschlossen |
+| **2B** | CIS-Härtung des Golden Images | Härtung **einmal** im Packer-Template statt pro VM (SSH, Firewall, Updates, Dienste); ein neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) – Details: [`docs/cis-hardening.md`](docs/cis-hardening.md) | ✅ abgeschlossen |
+| **2C** | Zweite VM (DB-Server) | PostgreSQL-VM aus dem gehärteten Image, Netzwerkzugriff Web-Server → DB-Server über drei Ebenen (Firewall, Lauschen, Zugriffsregel) – Details: [`docs/db-server-architecture.md`](docs/db-server-architecture.md) | ✅ abgeschlossen |
+| **3** | State-Backend (HCP Terraform) | Zentraler, versionierter und gesperrter Terraform-State statt lokaler `.tfstate`-Datei – verhindert State-Drift zwischen verschiedenen Ausführungsorten – Details: [Terraform-State in HCP Terraform](#terraform-state-in-hcp-terraform-phase-3) | ✅ abgeschlossen |
+| **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen | ⏳ als Nächstes |
+| **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten | 🔜 geplant |
+| **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch | 🔜 geplant |
 
 Die vollständige Begründung der Phasenreihenfolge (warum diese Reihenfolge und nicht anders) steht in `00_projekt_ziel_und_lernpfad.md`.
 
