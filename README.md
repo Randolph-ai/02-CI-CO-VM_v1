@@ -10,7 +10,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-orange)
-![Proxmox](https://img.shields.io/badge/Proxmox-7.x-red)
+![Proxmox](https://img.shields.io/badge/Proxmox-9.x-red)
 ![Checkov](https://img.shields.io/badge/Checkov-3.3+-brightgreen)
 
 ---
@@ -107,7 +107,7 @@ Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: 
 | Checkov | 3.3.6 | Policy-as-Code Security-Scanning (Terraform- und Ansible-Framework) |
 | Ansible | 2.14+ | Configuration Management |
 | PostgreSQL | 14 (Ubuntu-22.04-Standardversion) | Datenbank auf dem DB-Server |
-| Proxmox VE | 7.x/8.x | Virtualisierungsplattform |
+| Proxmox VE | 9.x | Virtualisierungsplattform |
 | Ubuntu | 22.04 LTS | Betriebssystem (Cloud-Image) |
 
 [↑ Nach oben](#-inhaltsverzeichnis)
@@ -203,7 +203,7 @@ promote-template        → Gibt ein neues Template nach erfolgreichem Testlauf 
 
 `build-template` läuft nur, wenn `detect-changes` eine Änderung im `packer/`-Verzeichnis (oder an `pipeline.yml` selbst) erkennt – bei reinen Terraform-/Ansible-Änderungen wird der Job übersprungen.
 
-Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden die folgenden drei Jobs gar nicht erst gestartet ("Skipped", 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate).
+Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden die folgenden vier Jobs gar nicht erst gestartet ("Skipped", 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate).
 
 Nach einem erfolgreichen Lauf sind beide VMs über ihre von Terraform ausgegebenen IPs erreichbar (`terraform output -raw vm_ip` bzw. `terraform output -raw db_server_ip`). Da der State seit Phase 3 in HCP Terraform liegt, braucht dafür auch ein manueller Aufruf im Terminal eine Anmeldung (`terraform login`) und einen Ordner mit `cloud`-Block nach `terraform init`.
 

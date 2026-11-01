@@ -3,7 +3,7 @@
 [← Zurück zur README](../README.md#-architektur-vertiefungen)
 
 Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
-- `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird (aktuell noch fest hinterlegt; Packer vergibt die Build-ID seit Phase 2B.2 automatisch, die Verbindung zur Terraform-Variable ist noch nicht angeschlossen – siehe Roadmap)
+- `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird (für Web-Server und DB-Server aktuell noch fest in `terraform.tfvars` hinterlegt. Ein neu gebautes Template nutzt die Pipeline bisher nur für die Test-VM, über die Variable `test_template_id`; die produktiven VMs daran anzuschließen, ist noch offen)
 - `web_server_ip`, `db_server_ip`, `network_gateway` – Netzwerkkonfiguration der VMs
 - `web_server_disk_size`, `db_server_disk_size` – Ziel-Diskgröße (muss `>= 40` sein, sonst blockiert `CKV_PROXMOX_3`)
 - `db_server_cores`, `db_server_memory` – Ressourcengröße des DB-Servers
