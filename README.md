@@ -2,6 +2,12 @@
 
 > Automatisierte Infrastructure-as-Code Pipeline mit Packer, Terraform, Ansible, GitHub Actions und Checkov Custom Policy Checks
 
+> **In drei Sätzen**
+>
+> 1. Ich baue Server nicht von Hand, sondern beschreibe sie als Code – ein Programm baut sie danach automatisch, jedes Mal gleich und nachvollziehbar.
+> 2. Bevor etwas in Betrieb geht, prüft das System den Bauplan automatisch auf Sicherheitslücken; zusätzlich greife ich meine eigenen Server gezielt an, um zu sehen, ob die Abwehr hält, und dokumentiere jeden Angriff wie ein Sicherheitsanalyst.
+> 3. Das Projekt orientiert sich damit an dem, was die EU-Verordnung DORA von Banken verlangt: IT-Systeme schützen, Angriffe erkennen und die Widerstandsfähigkeit regelmäßig testen.
+
 ![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-orange)
 ![Proxmox](https://img.shields.io/badge/Proxmox-7.x-red)
