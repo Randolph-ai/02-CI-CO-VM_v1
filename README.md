@@ -62,7 +62,7 @@ Dieses Projekt ist ein privates Lernprojekt und **orientiert sich an den Prinzip
 | DORA-Säule | Was DORA verlangt | Umsetzung im Projekt | Stand |
 |---|---|---|---|
 | **IKT-Risikomanagement** | Systeme schützen, Schwachstellen vermeiden | Gehärtetes Golden Image ([CIS-Härtung](docs/cis-hardening.md)) · Security-Gate vor jedem Deploy ([Checkov](docs/security-gates.md)) · eigener Zugangs-Token pro Pipeline-Job, minimale Rechte ([Authentifizierung](docs/authentication.md)) | ✅ umgesetzt |
-| **Vorfallmanagement** | Vorfälle erkennen, einstufen, dokumentieren | Angriffe aus der [Cyber Range](#-cyber-range) als Incident-Ticket mit Einstufung (Classification, Severity) | 🔜 geplant |
+| **Vorfallmanagement** | Vorfälle erkennen, einstufen, dokumentieren | Ereignisse aus der [Cyber Range](#-cyber-range) als Incident-Ticket mit Einstufung (Classification, Severity) – [erster Bericht](docs/soc/berichte/2026-11-01_admin-installiert-tool.md) | 🔶 begonnen |
 | **Resilienztests** | Regelmäßig testen, ob die Abwehr hält | Neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) · Angriffe in der [Cyber Range](#-cyber-range): Portscan durchgeführt, SSH-Brute-Force geplant | 🔶 teilweise |
 | **Drittparteirisiko** | Abhängigkeit von Dienstleistern beherrschen | HCP Terraform und GitHub als externe Dienste bewusst eingeordnet · Ausweg bei Anbieterausfall: State-Sicherung per `terraform state pull` ([Details](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3)) | 🔶 manuell, Automatisierung geplant |
 
@@ -88,6 +88,8 @@ Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: 
 | S6 | Zentrale Auswertung | SecurityOnion | 🔜 geplant |
 
 **Brücke zu IaC:** Die Erkennungswerkzeuge werden per **Ansible** installiert. Befunde aus der Cyber Range fließen als Härtung zurück ins Golden Image – Kreislauf: *Schwachstelle finden → per IaC härten → in der Pipeline prüfen → erneut angreifen.*
+
+**Berichte:** [Admin installiert ein Tool – nmap auf web-server-prod (01.11.2026)](docs/soc/berichte/2026-11-01_admin-installiert-tool.md) – Spuren in `auth.log`, `apt/history.log` und `dpkg.log` ausgewertet, als Incident-Ticket dokumentiert.
 
 **Lernnachweis:** TryHackMe, Pfad *SOC Level 1* (in Arbeit).
 
