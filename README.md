@@ -12,14 +12,13 @@
 ## 📋 Inhaltsverzeichnis
 
 - [Projektübersicht](#-projektübersicht)
+- [Bezug zu DORA](#-bezug-zu-dora)
+- [Cyber Range](#-cyber-range)
 - [Technologie-Stack](#-technologie-stack)
 - [Projektstruktur](#-projektstruktur)
-- [Architektur-Vertiefungen](#-architektur-vertiefungen)
-- [Voraussetzungen](#️-voraussetzungen)
+- [Vertiefungen und Betrieb](#-architektur-vertiefungen)
 - [Installation & Setup](#-installation--setup)
 - [Nutzung](#️-nutzung)
-- [Konfiguration](#-konfiguration)
-- [Fehlerbehebung](#-fehlerbehebung)
 - [Bekannte technische Schuld](#️-bekannte-technische-schuld-offen)
 - [Roadmap - Stand und nächste Schritte](#️-roadmap-stand-und-nächste-schritte)
 - [Zukunftsausblick](#-zukunftsausblick-ai-driven-siem--monitoring)
@@ -27,6 +26,8 @@
 ---
 
 ## 🎯 Projektübersicht
+
+**Leitidee: Ich baue sichere Infrastruktur per IaC, greife sie an, erkenne die Angriffe und dokumentiere sie.**
 
 ![Proxmox CI/CD Pipeline](docs/images/pipeline_diagramm_mit_server.png)
 
@@ -40,16 +41,51 @@ Dieses Projekt automatisiert die sichere Bereitstellung einer vollständigen Inf
 | **Ansible** | Konfiguriert die VMs: Nginx auf dem Web-Server, PostgreSQL auf dem DB-Server (inkl. Netzwerkzugriffskonfiguration zwischen beiden) |
 | **GitHub Actions** | Automatisiert die komplette Pipeline inkl. beider Security-Gates (self-hosted Runner) |
 
-**Hinweis zur Phasen-Nummerierung:** Die Security-Erweiterung des Projekts läuft in benannten, aufeinander aufbauenden Phasen (2A, 2B, 2C, ...) – jede Referenz auf "Phase X" bezieht sich auf diese interne Roadmap, nicht auf einen externen Standard.
+Das Projekt wächst in aufeinander aufbauenden Phasen (2A, 2B, 2C, 3 …) – Stand und nächste Schritte: [🗺️ Roadmap](#️-roadmap-stand-und-nächste-schritte).
 
-- **Phase 2A** – Statisches Security-Gate (Checkov) in die Pipeline integriert *(abgeschlossen)*
-- **Phase 2B** – CIS-Härtung des Packer-Golden-Images *(abgeschlossen)*
-- **Phase 2C** – Zweite VM (DB-Server, PostgreSQL) aus dem gehärteten Image, inkl. Netzwerkzugriffskonfiguration Web-Server → DB-Server *(abgeschlossen)*
-- **Phase 3** – Terraform-State zentral in HCP Terraform (Free-Tarif, Workspace `02-CI-CO-VM`) mit State-Locking; die Pipeline meldet sich per Team-Token an *(abgeschlossen)*
+[↑ Nach oben](#-inhaltsverzeichnis)
 
-Die Reise geht danach weiter – Phasen 4 bis 6 (Dynamisches
-Inventar, Vault, Compliance-Doku) findest du unter
-[🗺️ Roadmap: Stand und nächste Schritte](#️-roadmap-stand-und-nächste-schritte).
+---
+
+## 🏦 Bezug zu DORA
+
+Der **Digital Operational Resilience Act (DORA, EU-Verordnung 2022/2554)** gilt seit dem 17.01.2025 für Banken und Finanzunternehmen. Er verlangt, dass IT-Systeme geschützt, Vorfälle erkannt und die Abwehr regelmäßig getestet wird.
+
+Dieses Projekt ist ein privates Lernprojekt und **orientiert sich an den Prinzipien von DORA**. Die Tabelle zeigt, welche Bausteine zu welcher DORA-Säule passen:
+
+| DORA-Säule | Was DORA verlangt | Umsetzung im Projekt | Stand |
+|---|---|---|---|
+| **IKT-Risikomanagement** | Systeme schützen, Schwachstellen vermeiden | Gehärtetes Golden Image ([CIS-Härtung](docs/cis-hardening.md)) · Security-Gate vor jedem Deploy ([Checkov](docs/security-gates.md)) · eigener Zugangs-Token pro Pipeline-Job, minimale Rechte ([Authentifizierung](docs/authentication.md)) | ✅ umgesetzt |
+| **Vorfallmanagement** | Vorfälle erkennen, einstufen, dokumentieren | Angriffe aus der [Cyber Range](#-cyber-range) als Incident-Ticket mit Einstufung (Classification, Severity) | 🔜 geplant |
+| **Resilienztests** | Regelmäßig testen, ob die Abwehr hält | Neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) · Angriffe in der [Cyber Range](#-cyber-range): Portscan durchgeführt, SSH-Brute-Force geplant | 🔶 teilweise |
+| **Drittparteirisiko** | Abhängigkeit von Dienstleistern beherrschen | HCP Terraform und GitHub als externe Dienste bewusst eingeordnet · Ausweg bei Anbieterausfall: State-Sicherung per `terraform state pull` ([Details](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3)) | 🔶 manuell, Automatisierung geplant |
+
+[↑ Nach oben](#-inhaltsverzeichnis)
+
+---
+
+## 🔍 Cyber Range
+
+**Cyber Range – das Übungsgelände für Angriff und Abwehr**
+
+Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: Ein Angreifer-System (Kali Linux, eigenes VLAN) greift eigene Ziel-VMs aus der Pipeline an, Erkennungswerkzeuge zeichnen auf und werten aus, jeder Angriff wird dokumentiert.
+
+| Schritt | Thema | Werkzeuge | Stand |
+|---|---|---|---|
+| S1 | Netzwerkpakete lesen | `tcpdump`, Wireshark | ✅ abgeschlossen |
+| S2 | Portscan Angreifer → Web-Server | `nmap`, Wireshark | ✅ durchgeführt, Bericht in Arbeit |
+| S4 | Angriffserkennung per Regeln (Installation per Ansible) | Suricata | 🔜 geplant |
+| S4b | Verbindungsprotokolle auswerten | Zeek | 🔜 geplant |
+| S4c | Regeln und Alarme vergleichen | Snort | 🔶 Einstieg über TryHackMe |
+| S3 | SSH-Brute-Force, ausgewertet als Incident-Ticket | alle drei Werkzeuge | 🔜 geplant |
+| S5 | Angriffe einordnen | MITRE ATT&CK | 🔜 geplant |
+| S6 | Zentrale Auswertung | SecurityOnion | 🔜 geplant |
+
+**Brücke zu IaC:** Die Erkennungswerkzeuge werden per **Ansible** installiert. Befunde aus der Cyber Range fließen als Härtung zurück ins Golden Image – Kreislauf: *Schwachstelle finden → per IaC härten → in der Pipeline prüfen → erneut angreifen.*
+
+**Lernnachweis:** TryHackMe, Pfad *SOC Level 1* (in Arbeit).
+
+**Grundsätze:** Angriffe nur gegen eigene VMs im eigenen Netz · keine Mitschnitte (`.pcap`) und keine Zugangsdaten im Repo.
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
@@ -112,26 +148,17 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 | **DB-Server (Phase 2C)** | Drei-Ebenen-Netzwerkmodell (Firewall/Lauschen/Zugriffsregel) | [`docs/db-server-architecture.md`](docs/db-server-architecture.md) |
 | **Authentifizierung** | Dual-Auth Proxmox-API + getrennte SSH-Key-Architektur (Build/Produktiv) | [`docs/authentication.md`](docs/authentication.md) |
 
+**Betrieb:**
+
+| Thema | Kurzbeschreibung | Vertiefung |
+|---|---|---|
+| **Voraussetzungen** | Proxmox, Runner, HCP Terraform, benötigte GitHub Secrets | [`docs/voraussetzungen.md`](docs/voraussetzungen.md) |
+| **Konfiguration** | Stellschrauben in Terraform, Terraform-State in HCP Terraform (Phase 3) | [`docs/konfiguration.md`](docs/konfiguration.md) |
+| **Fehlerbehebung** | Typische Fehlerbilder mit Ursache und Lösung | [`docs/fehlerbehebung.md`](docs/fehlerbehebung.md) |
+
 [↑ Nach oben](#-inhaltsverzeichnis)
 
 ---
-
-## ⚙️ Voraussetzungen
-
-- Proxmox VE Host, erreichbar über die API (`https://<proxmox-ip>:8006/api2/json`)
-- Self-hosted GitHub Actions Runner, registriert mit den Labels `self-hosted` **und** `proxmox` (ohne exaktes Label-Match hängt der Job endlos in der Warteschlange, ohne Fehlermeldung)
-- Auf dem Runner installiert: Packer, Terraform, Ansible, Checkov (>= 3.3.6)
-- HCP Terraform (Free-Tarif) als zentraler Speicher für den Terraform-State (seit Phase 3):
-  - Organisation `randolph-iacdeveloping`, Workspace `02-CI-CO-VM`
-  - Workflow **CLI-driven**, Execution Mode **Local** (Plan/Apply laufen auf dem Runner, HCP speichert nur den State – HCP-Server würden Proxmox im Heimnetz nicht erreichen)
-  - Remote State Sharing: **keiner** (der State kann sensible Werte enthalten)
-- GitHub Secrets gesetzt:
-  - `PROXMOX_URL`, `PACKER_TOKEN_ID`, `PACKER_TOKEN_SECRET` (für Packer, API-Token-Auth)
-  - `TF_VAR_*`-Secrets passend zu den in `variables.tf` deklarierten Variablen
-  - `SSH_PRIVATE_KEY` (dauerhafter Produktiv-Key, User `ansible` – siehe [`docs/authentication.md`](docs/authentication.md))
-  - `SSH_PUBLIC_KEY` (öffentlicher Gegenpart, als `TF_VAR_ssh_public_key` an Terraform übergeben)
-  - `TF_API_TOKEN` (HCP-Terraform-**Team**-Token, wird in Job 3 als `TF_TOKEN_app_terraform_io` bereitgestellt – siehe [Konfiguration](#-konfiguration))
-- Eine bereits existierende Cloud-Image-Basis-VM (Template, standardmäßig VM-ID `9000`) als Klon-Quelle für Packer
 
 ## 🔧 Installation & Setup
 
@@ -145,14 +172,18 @@ Diese README hält sich bewusst kurz. Wer tiefer in einzelne Entscheidungen eins
 3. Zwei Terraform-Variablen-Dateien anlegen:
    - `terraform/terraform.tfvars` (unkritische Werte: Netzwerk, IPs, Disk-Größe, `template_vm_id`) aus `terraform.tfvars.example`
    - `terraform/secrets.auto.tfvars` (nur die drei Proxmox-Auth-Werte: `pm_api_url`, `pm_api_token_id`, `pm_api_token_secret`) – wird von Terraform automatisch geladen, `.gitignore`-geschützt
-4. HCP Terraform einrichten (siehe Voraussetzungen): Workspace anlegen, Execution Mode **Local**, Team-Token erzeugen. Existiert bereits ein lokaler State, wird er **einmalig** nach HCP umgezogen – erst sichern, dann `terraform init` im Ordner mit State und `cloud`-Block, Rückfrage mit `yes` beantworten (Details: [Konfiguration](#-konfiguration))
-5. GitHub Secrets im Repo hinterlegen (siehe Voraussetzungen)
+4. HCP Terraform einrichten (siehe [Voraussetzungen](docs/voraussetzungen.md)): Workspace anlegen, Execution Mode **Local**, Team-Token erzeugen. Existiert bereits ein lokaler State, wird er **einmalig** nach HCP umgezogen – erst sichern, dann `terraform init` im Ordner mit State und `cloud`-Block, Rückfrage mit `yes` beantworten (Details: [Konfiguration](docs/konfiguration.md))
+5. GitHub Secrets im Repo hinterlegen (siehe [Voraussetzungen](docs/voraussetzungen.md))
 6. Self-hosted Runner registrieren und mit dem Label `proxmox` versehen
 7. Push auf `main` (oder Pull Request) startet die Pipeline automatisch
 
+[↑ Nach oben](#-inhaltsverzeichnis)
+
+---
+
 ## ▶️ Nutzung
 
-Ein Push auf `main` löst die Pipeline mit sechs aufeinander aufbauenden Jobs aus:
+Ein Push auf `main` löst die Pipeline mit sieben aufeinander aufbauenden Jobs aus:
 
 ```
 detect-changes          → Erkennt geänderte Verzeichnisse (packer/terraform/ansible)
@@ -161,6 +192,7 @@ security-scan           → Checkov-Gate, Terraform (hart) – Stop bei Verstoß
 deploy-vm               → Terraform provisioniert Web-Server UND DB-Server
 ansible-security-scan   → Checkov-Gate, Ansible (weich) – Report, kein Stop
 configure-vm            → Ansible konfiguriert Nginx und PostgreSQL
+promote-template        → Gibt ein neues Template nach erfolgreichem Testlauf frei und protokolliert es
 ```
 
 `build-template` läuft nur, wenn `detect-changes` eine Änderung im `packer/`-Verzeichnis (oder an `pipeline.yml` selbst) erkennt – bei reinen Terraform-/Ansible-Änderungen wird der Job übersprungen.
@@ -168,53 +200,6 @@ configure-vm            → Ansible konfiguriert Nginx und PostgreSQL
 Der Fortschritt ist im GitHub-Actions-Tab des Repos einsehbar. Schlägt `security-scan` fehl, werden die folgenden drei Jobs gar nicht erst gestartet ("Skipped", 0 Sekunden Laufzeit). Schlägt dagegen `ansible-security-scan` fehl, läuft `configure-vm` trotzdem an (Soft-Gate).
 
 Nach einem erfolgreichen Lauf sind beide VMs über ihre von Terraform ausgegebenen IPs erreichbar (`terraform output -raw vm_ip` bzw. `terraform output -raw db_server_ip`). Da der State seit Phase 3 in HCP Terraform liegt, braucht dafür auch ein manueller Aufruf im Terminal eine Anmeldung (`terraform login`) und einen Ordner mit `cloud`-Block nach `terraform init`.
-
-## 🔩 Konfiguration
-
-Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
-- `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird (aktuell noch fest hinterlegt; Packer vergibt die Build-ID seit Phase 2B.2 automatisch, die Verbindung zur Terraform-Variable ist noch nicht angeschlossen – siehe Roadmap)
-- `web_server_ip`, `db_server_ip`, `network_gateway` – Netzwerkkonfiguration der VMs
-- `web_server_disk_size`, `db_server_disk_size` – Ziel-Diskgröße (muss `>= 40` sein, sonst blockiert `CKV_PROXMOX_3`)
-- `db_server_cores`, `db_server_memory` – Ressourcengröße des DB-Servers
-
-Mindestwerte der Custom Checks sind direkt im jeweiligen Check-Code als Konstanten hinterlegt (z. B. `MIN_DISK_SIZE_GB` in `ProxmoxDiskMemorySet.py`) und bei Bedarf dort anpassbar.
-
-### Terraform-State in HCP Terraform (Phase 3)
-
-Der State liegt nicht mehr als Datei `terraform.tfstate` im Arbeitsordner des Runners, sondern zentral in HCP Terraform. Damit ist er **zentral**, **versioniert** (jede Fassung mit Zeitpunkt und Auslöser, Änderungen als Vergleich) und **gesperrt** (Locking: ein zweiter gleichzeitiger Lauf wird mit `Error acquiring the state lock` abgewiesen).
-
-Drei Zutaten machen den Zugriff aus:
-
-| Zutat | Wo | Inhalt |
-|---|---|---|
-| **Adresse** | `terraform/provider.tf`, `cloud`-Block im `terraform`-Block | Organisation `randolph-iacdeveloping`, Workspace `02-CI-CO-VM` (keine Geheimnisse, darf ins Repo) |
-| **Schlüssel** | Pipeline: Job 3 `deploy-vm`, `env:` im Job-Kopf | `TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}` – gilt für alle Terraform-Befehle des Jobs (`init`, `plan`, `apply`, `output`) |
-| **Auslöser** | `terraform init` | verbindet sich mit dem Workspace; in der Pipeline mit `-input=false`, damit ein Lauf bei einer unerwarteten Rückfrage abbricht statt zu hängen |
-
-Der Token steht **nie** im Code. `TF_TOKEN_` ist ein von Terraform vorgegebener Namensanfang, danach folgt die Adresse des Dienstes (`app.terraform.io`, Punkte durch `_` ersetzt). Für manuelle Arbeit im Terminal gilt stattdessen ein persönlicher Token aus `terraform login` (gespeichert in `~/.terraform.d/credentials.tfrc.json`).
-
-**Hinweis zum Umzug:** Beim Umzug eines bestehenden States vergibt HCP Terraform eine neue `lineage` und beginnt mit `serial` 1 – der Inhalt (Ressourcen, Outputs) bleibt gleich. Eine Sicherheitskopie des alten lokalen States wird vor dem Umzug außerhalb von Repo und Runner-Ordner abgelegt.
-
-**Backup / Exit-Strategie (geplant):** Regelmäßige Kopie des aktuellen States per `terraform state pull`, verschlüsselt und außerhalb des Repos – damit der State auch bei Ausfall des Anbieters oder Kontoverlust wiederherstellbar bleibt (`terraform state push` im Notfall).
-
-[↑ Nach oben](#-inhaltsverzeichnis)
-
----
-
-## 🩹 Fehlerbehebung
-
-| Symptom | Ursache | Lösung |
-|---|---|---|
-| Job hängt endlos in "Queued" | Runner-Label passt nicht zu `runs-on` in `pipeline.yml` | Label `proxmox` beim Runner ergänzen |
-| `E: Could not get lock /var/lib/apt/lists/lock` im Packer-Build | Cloud-Init läuft beim ersten Boot noch, blockiert `apt`-Lock | `sudo cloud-init status --wait` als erste Zeile im `shell`-Provisioner |
-| `config file already exists` beim Terraform-`apply`, obwohl Plan `X to add` zeigt | State-Drift: lokal getesteter State kennt eine VM, die im Runner-eigenen State nicht existiert | Betroffene VM einmalig löschen (`qm destroy <id>`), Pipeline im Runner-Kontext neu bauen lassen. Strukturelle Lösung: zentrales State-Backend (Phase 3) |
-| Terraform will VM erneut anlegen, obwohl sie läuft | `terraform.tfstate` ging beim Checkout verloren (self-hosted Runner mit geteiltem Arbeitsordner) | `clean: false` bei **allen** `actions/checkout`-Schritten setzen |
-| `Error acquiring the state lock`, obwohl kein anderer Lauf aktiv scheint | Hängender Lock: ein früherer Lauf wurde abgebrochen (Absturz, Runner-Neustart) und konnte die Sperre in HCP Terraform nicht mehr freigeben | Erst **prüfen**, ob wirklich kein Lauf mehr aktiv ist (GitHub Actions, auf dem Runner `pgrep -a terraform`), dann in HCP Terraform unter Workspace → Settings → Locking entsperren, Gegenprobe mit `terraform plan`. Hinweis: Die „Lock Info“ in der Fehlermeldung beschreibt den **eigenen** Versuch, nicht den Halter der Sperre |
-| Dienst von einer anderen VM aus nicht erreichbar (`Connection refused`), obwohl Firewall-Regel korrekt ist | Dienst lauscht per Default nur auf `localhost` | Netzwerk-Lauschen (z. B. `listen_addresses` bei PostgreSQL) anpassen, siehe [`docs/db-server-architecture.md`](docs/db-server-architecture.md) |
-| `REMOTE HOST IDENTIFICATION HAS CHANGED` bei SSH | VM wurde unter gleicher IP neu aufgebaut, neuer Host-Key | `ssh-keygen -f ~/.ssh/known_hosts -R '<ip>'` |
-| Checkov zeigt scheinbar wechselnde Ergebnisse ohne Codeänderung | `--check <ID>`-Flag filtert die Anzeige auf einen Check | Ohne `--check`-Filter testen |
-| Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder falscher `--external-checks-dir`-Pfad | Ordnerstruktur prüfen; direkter `importlib`-Test macht den Fehler sichtbar |
-| `build-template` läuft bei jedem manuellen `workflow_dispatch`-Lauf, auch ohne Packer-Änderung | `paths-filter` vergleicht mangels zweitem Commit (`fetch-depth: 1` Default) gegen einen leeren Zustand – alle Dateien gelten dann als "geändert" | `fetch-depth: 2` im `actions/checkout`-Schritt von `detect-changes` setzen |
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
@@ -243,12 +228,12 @@ Das Projekt wächst in aufeinander aufbauenden Phasen Richtung Enterprise-Reife.
 | **2A** | Security-Gate (Checkov) | Statische IaC-Analyse **vor** dem Deploy: hartes Gate für Terraform, weiches Gate für Ansible, eigene Custom Checks – Details: [`docs/security-gates.md`](docs/security-gates.md) | ✅ abgeschlossen |
 | **2B** | CIS-Härtung des Golden Images | Härtung **einmal** im Packer-Template statt pro VM (SSH, Firewall, Updates, Dienste); ein neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) – Details: [`docs/cis-hardening.md`](docs/cis-hardening.md) | ✅ abgeschlossen |
 | **2C** | Zweite VM (DB-Server) | PostgreSQL-VM aus dem gehärteten Image, Netzwerkzugriff Web-Server → DB-Server über drei Ebenen (Firewall, Lauschen, Zugriffsregel) – Details: [`docs/db-server-architecture.md`](docs/db-server-architecture.md) | ✅ abgeschlossen |
-| **3** | State-Backend (HCP Terraform) | Zentraler, versionierter und gesperrter Terraform-State statt lokaler `.tfstate`-Datei – verhindert State-Drift zwischen verschiedenen Ausführungsorten – Details: [Terraform-State in HCP Terraform](#terraform-state-in-hcp-terraform-phase-3) | ✅ abgeschlossen |
+| **3** | State-Backend (HCP Terraform) | Zentraler, versionierter und gesperrter Terraform-State statt lokaler `.tfstate`-Datei – verhindert State-Drift zwischen verschiedenen Ausführungsorten – Details: [Terraform-State in HCP Terraform](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3) | ✅ abgeschlossen |
 | **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen | ⏳ als Nächstes |
 | **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten | 🔜 geplant |
 | **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch | 🔜 geplant |
 
-Die vollständige Begründung der Phasenreihenfolge (warum diese Reihenfolge und nicht anders) steht in `00_projekt_ziel_und_lernpfad.md`.
+Parallel zu den Phasen läuft die [Cyber Range](#-cyber-range).
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 
@@ -256,9 +241,9 @@ Die vollständige Begründung der Phasenreihenfolge (warum diese Reihenfolge und
 
 ## 🚀 Zukunftsausblick: AI-Driven SIEM & Monitoring
 
-Nach dem erfolgreichen Abschluss der IaC-Phasen wird das Framework um eine automatisierte Sicherheitsüberwachung (SOC-in-a-Box) erweitert:
+Aufbauend auf den IaC-Phasen und der [Cyber Range](#-cyber-range) wird das Framework um eine zentrale, automatisierte Sicherheitsüberwachung (SOC-in-a-Box) erweitert:
 
-- **Automated Deployment:** Ansible-gestützte Instanziierung von Netzwerk-Sensoren (**Zeek / Snort**) sowie ein zentraler Log-Cluster (**Grafana / OpenSearch**)
+- **Automated Deployment:** Ansible-gestützte Instanziierung eines zentralen Log-Clusters (**Grafana / OpenSearch**)
 - **Data Pipeline:** Automatisierter Versand von System- und Netzwerktracks (via Promtail/Beats) an das zentrale SIEM
 - **AI-Driven Analytics:** Eigenständige Python-Pipeline (**Pandas**) zur Anomalie-Erkennung in Log-Strukturen
 - **Automated Reporting:** LLM-gestützte Kontext-Evaluierung von Sicherheitsvorfällen, Generierung von *Executive Security Compliance Reports*
