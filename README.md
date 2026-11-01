@@ -221,19 +221,25 @@ Transparent dokumentiert statt verschwiegen, analog zum `checkov:skip`-Prinzip:
 
 ## 🗺️ Roadmap: Stand und nächste Schritte
 
-Das Projekt wächst in aufeinander aufbauenden Phasen Richtung Enterprise-Reife. Die Tabelle zeigt den ganzen Weg: was abgeschlossen ist, was als Nächstes kommt und was geplant ist.
+Das Projekt wächst in aufeinander aufbauenden Phasen Richtung Enterprise-Reife. Die Tabelle zeigt den ganzen Weg: was abgeschlossen ist, was als Nächstes kommt und was geplant ist. Die Spalte **DORA-Säule** zeigt, auf welchen Teil des [DORA-Bezugs](#-bezug-zu-dora) ein Schritt einzahlt.
 
-| Phase | Thema | Kernidee | Status |
-|---|---|---|---|
-| **2A** | Security-Gate (Checkov) | Statische IaC-Analyse **vor** dem Deploy: hartes Gate für Terraform, weiches Gate für Ansible, eigene Custom Checks – Details: [`docs/security-gates.md`](docs/security-gates.md) | ✅ abgeschlossen |
-| **2B** | CIS-Härtung des Golden Images | Härtung **einmal** im Packer-Template statt pro VM (SSH, Firewall, Updates, Dienste); ein neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) – Details: [`docs/cis-hardening.md`](docs/cis-hardening.md) | ✅ abgeschlossen |
-| **2C** | Zweite VM (DB-Server) | PostgreSQL-VM aus dem gehärteten Image, Netzwerkzugriff Web-Server → DB-Server über drei Ebenen (Firewall, Lauschen, Zugriffsregel) – Details: [`docs/db-server-architecture.md`](docs/db-server-architecture.md) | ✅ abgeschlossen |
-| **3** | State-Backend (HCP Terraform) | Zentraler, versionierter und gesperrter Terraform-State statt lokaler `.tfstate`-Datei – verhindert State-Drift zwischen verschiedenen Ausführungsorten – Details: [Terraform-State in HCP Terraform](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3) | ✅ abgeschlossen |
-| **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen | ⏳ als Nächstes |
-| **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten | 🔜 geplant |
-| **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch | 🔜 geplant |
+| Phase | Thema | Kernidee | DORA-Säule | Status |
+|---|---|---|---|---|
+| **2A** | Security-Gate (Checkov) | Statische IaC-Analyse **vor** dem Deploy: hartes Gate für Terraform, weiches Gate für Ansible, eigene Custom Checks – [Details](docs/security-gates.md) | IKT-Risikomanagement | ✅ abgeschlossen |
+| **2B** | CIS-Härtung des Golden Images | Härtung **einmal** im Packer-Template statt pro VM (SSH, Firewall, Updates, Dienste); neues Template erst nach erfolgreichem Testlauf freigegeben (Promotion) – [Details](docs/cis-hardening.md) | IKT-Risikomanagement, Resilienztests | ✅ abgeschlossen |
+| **2C** | Zweite VM (DB-Server) | PostgreSQL-VM aus dem gehärteten Image, Netzwerkzugriff Web-Server → DB-Server über drei Ebenen (Firewall, Lauschen, Zugriffsregel) – [Details](docs/db-server-architecture.md) | IKT-Risikomanagement | ✅ abgeschlossen |
+| **3** | State-Backend (HCP Terraform) | Zentraler, versionierter und gesperrter Terraform-State statt lokaler `.tfstate`-Datei – [Details](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3) | Drittparteirisiko | ✅ abgeschlossen |
+| **3+** | Härtung aus SOC-Befund | Befund aus der Cyber Range (Root-Login per SSH) wird per Packer im Golden Image geschlossen und in der Pipeline geprüft (Test auf der VM + Custom Checkov Check) | IKT-Risikomanagement, Resilienztests | ⏳ als Nächstes |
+| **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen – keine VM wird vergessen | IKT-Risikomanagement | 🔜 danach |
+| **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten | IKT-Risikomanagement | 🔜 geplant |
+| **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch | IKT-Risikomanagement | 🔜 geplant |
+| **parallel** | [Cyber Range](#-cyber-range) | Eigene VMs angreifen, Angriffe mit Suricata, Zeek, Snort und SecurityOnion erkennen, als Incident-Ticket dokumentieren | Resilienztests, Vorfallmanagement | 🔶 läuft |
 
-Parallel zu den Phasen läuft die [Cyber Range](#-cyber-range).
+**Nach Phase 6:**
+- **Wiederkehrender Packer-Build** – neue Sicherheits-Patches fließen automatisch und regelmäßig ins Golden Image
+- **Kubernetes im Kleinen** – k3s auf einer eigenen VM aus dem gehärteten Golden Image
+- **Cloud-Plattform** – dieselben Prinzipien auf AWS oder Azure
+- **Zertifizierung** – HashiCorp Terraform Associate
 
 [↑ Nach oben](#-inhaltsverzeichnis)
 

@@ -1,6 +1,6 @@
 # 🩹 Fehlerbehebung
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)
 
 | Symptom | Ursache | Lösung |
 |---|---|---|
@@ -15,4 +15,4 @@
 | Checkov lädt Custom-Check gar nicht | Fehlende/falsch benannte `__init__.py`, oder falscher `--external-checks-dir`-Pfad | Ordnerstruktur prüfen; direkter `importlib`-Test macht den Fehler sichtbar |
 | `build-template` läuft bei jedem manuellen `workflow_dispatch`-Lauf, auch ohne Packer-Änderung | `paths-filter` vergleicht mangels zweitem Commit (`fetch-depth: 1` Default) gegen einen leeren Zustand – alle Dateien gelten dann als "geändert" | `fetch-depth: 2` im `actions/checkout`-Schritt von `detect-changes` setzen |
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)

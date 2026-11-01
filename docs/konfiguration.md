@@ -1,6 +1,6 @@
 # 🔩 Konfiguration
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)
 
 Wichtige Stellschrauben in `terraform/variables.tf` / `terraform.tfvars`:
 - `template_vm_id` – ID des Packer-Golden-Image-Templates, das geklont wird (aktuell noch fest hinterlegt; Packer vergibt die Build-ID seit Phase 2B.2 automatisch, die Verbindung zur Terraform-Variable ist noch nicht angeschlossen – siehe Roadmap)
@@ -28,4 +28,4 @@ Der Token steht **nie** im Code. `TF_TOKEN_` ist ein von Terraform vorgegebener 
 
 **Backup / Exit-Strategie (geplant):** Regelmäßige Kopie des aktuellen States per `terraform state pull`, verschlüsselt und außerhalb des Repos – damit der State auch bei Ausfall des Anbieters oder Kontoverlust wiederherstellbar bleibt (`terraform state push` im Notfall).
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)

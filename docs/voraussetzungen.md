@@ -1,6 +1,6 @@
 # ⚙️ Voraussetzungen
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)
 
 - Proxmox VE Host, erreichbar über die API (`https://<proxmox-ip>:8006/api2/json`)
 - Self-hosted GitHub Actions Runner, registriert mit den Labels `self-hosted` **und** `proxmox` (ohne exaktes Label-Match hängt der Job endlos in der Warteschlange, ohne Fehlermeldung)
@@ -17,4 +17,4 @@
   - `TF_API_TOKEN` (HCP-Terraform-**Team**-Token, wird in Job 3 als `TF_TOKEN_app_terraform_io` bereitgestellt – siehe [Konfiguration](konfiguration.md))
 - Eine bereits existierende Cloud-Image-Basis-VM (Template, standardmäßig VM-ID `9000`) als Klon-Quelle für Packer
 
-[← Zurück zur README](../README.md)
+[← Zurück zur README](../README.md#-architektur-vertiefungen)
