@@ -1,4 +1,4 @@
-# 🚀 CI/CD Pipeline Setup für Proxmox mit Security-Gate
+# 🚀 Self-Hosted-Infrastruktur auf Proxmox – IaC, Security-Gate und Cyber Range
 
 > Automatisierte Infrastructure-as-Code Pipeline mit Packer, Terraform, Ansible, GitHub Actions und Checkov Custom Policy Checks
 
