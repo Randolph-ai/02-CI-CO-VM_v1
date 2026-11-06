@@ -1,6 +1,6 @@
 # Bericht: Admin installiert ein Tool – nmap auf web-server-prod
 
-> **Cyber Range – Übung vom 01.11.2026.** [← Zurück zur README](../../../README.md#-cyber-range)
+> **Cyber Range – Übung vom 01.11.2026 (Timeline Nr. 001).** [← Zurück zur Timeline](../README.md) · [← README](../../../README.md#-cyber-range)
 >
 > **Übungsfall in der eigenen Cyber Range.** Die Admin-Aktion wurde
 > bewusst selbst ausgeführt, die Auswertung danach aus Sicht eines SOC-Analysten
@@ -11,6 +11,7 @@
 | **Title** | Manual installation and removal of nmap on web-server-prod (sudo, account ansible) |
 | **Severity** | Medium – known key from an internal host, but nmap on a production web server is non-standard and was removed afterwards |
 | **Classification** | Suspicious activity – pending verification (change approval not yet checked) |
+| **MITRE ATT&CK** | T1078 Valid Accounts · T1021.004 Remote Services: SSH · T1105 Ingress Tool Transfer · T1070.004 Indicator Removal: File Deletion *(ergänzt 06.11.)* |
 | **Affected Host** | web-server-prod (10.0.30.101) |
 | **Source IP** | 10.0.10.75 (soar-dev-server, intern) |
 | **Anlass** | proaktive Log-Prüfung (kein Alarm) |

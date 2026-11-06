@@ -62,7 +62,7 @@ Dieses Projekt ist ein privates Lernprojekt und **orientiert sich an den Prinzip
 | DORA-Säule | Was DORA verlangt | Umsetzung im Projekt | Stand |
 |---|---|---|---|
 | **IKT-Risikomanagement** | Systeme schützen, Schwachstellen vermeiden | Gehärtetes Golden Image ([CIS-Härtung](docs/cis-hardening.md)) · Security-Gate vor jedem Deploy ([Checkov](docs/security-gates.md)) · eigener Zugangs-Token pro Pipeline-Job, minimale Rechte ([Authentifizierung](docs/authentication.md)) | ✅ umgesetzt |
-| **Vorfallmanagement** | Vorfälle erkennen, einstufen, dokumentieren | Ereignisse aus der [Cyber Range](#-cyber-range) als Incident-Ticket mit Einstufung (Classification, Severity) – [erster Bericht](docs/soc/berichte/2026-11-01_admin-installiert-tool.md) | 🔶 begonnen |
+| **Vorfallmanagement** | Vorfälle erkennen, einstufen, dokumentieren | Ereignisse aus der [Cyber Range](#-cyber-range) als Incident-Ticket mit Einstufung (Classification, Severity) – [Berichte](docs/soc/README.md) | 🔶 begonnen |
 | **Resilienztests** | Regelmäßig testen, ob die Abwehr hält | Neues Template wird erst nach erfolgreichem Testlauf freigegeben (Promotion) · Angriffe in der [Cyber Range](#-cyber-range): Portscan durchgeführt, SSH-Brute-Force geplant | 🔶 teilweise |
 | **Drittparteirisiko** | Abhängigkeit von Dienstleistern beherrschen | HCP Terraform und GitHub als externe Dienste bewusst eingeordnet · Ausweg bei Anbieterausfall: State-Sicherung per `terraform state pull` ([Details](docs/konfiguration.md#terraform-state-in-hcp-terraform-phase-3)) | 🔶 manuell, Automatisierung geplant |
 
@@ -84,12 +84,12 @@ Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: 
 | S4b | Verbindungsprotokolle auswerten | Zeek | 🔜 geplant |
 | S4c | Regeln und Alarme vergleichen | Snort | 🔶 Einstieg über TryHackMe |
 | S3 | SSH-Brute-Force, ausgewertet als Incident-Ticket | alle drei Werkzeuge | 🔜 geplant |
-| S5 | Angriffe einordnen | MITRE ATT&CK | 🔜 geplant |
-| S6 | Zentrale Auswertung | SecurityOnion | 🔜 geplant |
+| S5 | Angriffe einordnen | MITRE ATT&CK | 🔶 begonnen (ATT&CK-Zeile in jedem Ticket) |
+| S4d | Zentrale Auswertung der Host-Logs (statt SecurityOnion) | Wazuh | 🔜 geplant |
 
 **Brücke zu IaC:** Die Erkennungswerkzeuge werden per **Ansible** installiert. Befunde aus der Cyber Range fließen als Härtung zurück ins Golden Image – Kreislauf: *Schwachstelle finden → per IaC härten → in der Pipeline prüfen → erneut angreifen.*
 
-**Berichte:** [Admin installiert ein Tool – nmap auf web-server-prod (01.11.2026)](docs/soc/berichte/2026-11-01_admin-installiert-tool.md) – Spuren in `auth.log`, `apt/history.log` und `dpkg.log` ausgewertet, als Incident-Ticket dokumentiert.
+**Berichte:** alle Übungen nummeriert in der [Timeline der Cyber Range](docs/soc/README.md) – jede als Incident-Ticket mit MITRE-ATT&CK-Zuordnung.
 
 **Lernnachweis:** TryHackMe, Pfad *SOC Level 1* (in Arbeit).
 
@@ -241,7 +241,7 @@ Das Projekt wächst in aufeinander aufbauenden Phasen Richtung Enterprise-Reife.
 | **4** | Dynamisches Inventar | Ansible fragt Proxmox live nach existierenden VMs ab, statt IPs manuell in `inventory.ini` zu pflegen – keine VM wird vergessen | IKT-Risikomanagement | 🔜 danach |
 | **5** | Secrets-Management (Vault) | Ablösung von Klartext-Secrets durch HashiCorp Vault, inkl. VM-spezifischer Zugangsdaten | IKT-Risikomanagement | 🔜 geplant |
 | **6** | Compliance & Doku-Automatisierung | `terraform-docs`/`ansible-doc` generieren Teile dieser Dokumentation künftig automatisch | IKT-Risikomanagement | 🔜 geplant |
-| **parallel** | [Cyber Range](#-cyber-range) | Eigene VMs angreifen, Angriffe mit Suricata, Zeek, Snort und SecurityOnion erkennen, als Incident-Ticket dokumentieren | Resilienztests, Vorfallmanagement | 🔶 läuft |
+| **parallel** | [Cyber Range](#-cyber-range) | Eigene VMs angreifen, Angriffe mit Suricata, Zeek, Snort und Wazuh erkennen, als Incident-Ticket dokumentieren | Resilienztests, Vorfallmanagement | 🔶 läuft |
 
 **Nach Phase 6:**
 - **Wiederkehrender Packer-Build** – neue Sicherheits-Patches fließen automatisch und regelmäßig ins Golden Image
