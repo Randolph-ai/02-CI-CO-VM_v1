@@ -5,7 +5,7 @@
 > **In drei Sätzen**
 >
 > 1. Ich baue Server nicht von Hand, sondern beschreibe sie als Code – ein Programm baut sie danach automatisch, jedes Mal gleich und nachvollziehbar.
-> 2. Vor jedem Einsatz prüft das System den Bauplan automatisch auf Sicherheitslücken. Gezielte Angriffe auf meine eigenen Server zeigen, ob die Abwehr hält – die Angriffe werden von mir als „Sicherheitsanalyst“ dokumentiert.
+> 2. Vor jedem Einsatz prüft das System den Bauplan automatisch auf Sicherheitslücken. Gezielte Angriffe auf meine eigenen Server zeigen, ob die Abwehr hält – die Angriffe werden von mir als „Sicherheitsanalyst“ [dokumentiert](docs/soc/README.md).
 > 3. Das Projekt orientiert sich damit an dem, was die EU-Verordnung DORA von Banken verlangt: IT-Systeme schützen, Angriffe erkennen und die Widerstandsfähigkeit regelmäßig testen.
 
 ![Version](https://img.shields.io/badge/version-1.3.0-blue)
@@ -74,6 +74,8 @@ Dieses Projekt ist ein privates Lernprojekt und **orientiert sich an den Prinzip
 
 **Cyber Range – das Übungsgelände für Angriff und Abwehr**
 
+**📄 Alle Berichte → [Timeline der Cyber Range](docs/soc/README.md)** – jede Übung nummeriert, als Incident-Ticket mit MITRE-ATT&CK-Zuordnung.
+
 Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: Ein Angreifer-System (Kali Linux, eigenes VLAN) greift eigene Ziel-VMs aus der Pipeline an, Erkennungswerkzeuge zeichnen auf und werten aus, jeder Angriff wird dokumentiert.
 
 | Schritt | Thema | Werkzeuge | Stand |
@@ -88,8 +90,6 @@ Die Pipeline baut die Infrastruktur. Die Cyber Range ist der Übungsraum darin: 
 | S4d | Zentrale Auswertung der Host-Logs (statt SecurityOnion) | Wazuh | 🔜 geplant |
 
 **Brücke zu IaC:** Die Erkennungswerkzeuge werden per **Ansible** installiert. Befunde aus der Cyber Range fließen als Härtung zurück ins Golden Image – Kreislauf: *Schwachstelle finden → per IaC härten → in der Pipeline prüfen → erneut angreifen.*
-
-**Berichte:** alle Übungen nummeriert in der [Timeline der Cyber Range](docs/soc/README.md) – jede als Incident-Ticket mit MITRE-ATT&CK-Zuordnung.
 
 **Lernnachweis:** TryHackMe, Pfad *SOC Level 1* (in Arbeit).
 
