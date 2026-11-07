@@ -17,6 +17,7 @@ als sicher beherrscht.
 |---|---|---|---|---|---|
 | 001 | 01.11.2026 | Admin-Aktion im Server finden · ① vorgezeigt | Admin installiert `nmap` auf web-server-prod und entfernt es wieder; Spuren in drei Logs gefunden | [Bericht](berichte/2026-11-01_admin-installiert-tool.md) | ✅ |
 | 002 | 06.11.2026 | Admin-Aktion im Server finden · ② selbst geführt | Gleiche Übung mit `socat`; Untersuchung selbst geführt, Ticket mit ATT&CK-Zeile | [Bericht](berichte/2026-11-06_admin-installiert-tool-socat.md) | ✅ |
+| 003 | 07.11.2026 | Admin-Aktion im Server finden · ③ allein | `chisel` per `curl` installiert (an `apt` vorbei) – Spur nur in `auth.log`, nicht in `apt/history.log`/`dpkg.log`; zeigt die Lücke der apt-Erkennung; Ticket mit ATT&CK-Zeile, Login per `gh run list` geklärt | [Bericht](berichte/2026-11-07_curl-chisel-ohne-apt.md) | ✅ |
 
 **Legende:** ✅ abgeschlossen · 🔄 läuft · 🔁 wird wiederholt
 
